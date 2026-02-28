@@ -38,6 +38,7 @@ public class LatestPartitionUtils {
 
   public static final String LBC_FIRST_EVENT_PARTITION_PROPERTY = "lbc.first_event_partition";
   public static final String LBC_LAST_EVENT_PARTITION_PROPERTY = "lbc.last_event_partition";
+  public static final String LBC_PARTITION_TOTAL_PROPERTY = "lbc.partition.total";
 
   private static final Pattern DATE_HOUR_PARTITION_PATTERN =
       Pattern.compile(

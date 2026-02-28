@@ -270,6 +270,7 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
       if (!partitionPathsOpt.isPresent()) {
         return;
       }
+      int totalPartitions = partitionPathsOpt.get().size();
       Optional<LatestPartitionUtils.PartitionTimestampBounds> timestampBoundsOpt =
           LatestPartitionUtils.getDateHourPartitionTimestampBounds(partitionPathsOpt.get());
       if (!timestampBoundsOpt.isPresent()) {
@@ -288,7 +289,9 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
           && timestampBounds
               .getFirstTimestamp()
               .equals(
-                  currentParameters.get(LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY))) {
+                  currentParameters.get(LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY))
+          && String.valueOf(totalPartitions)
+              .equals(currentParameters.get(LatestPartitionUtils.LBC_PARTITION_TOTAL_PROPERTY))) {
         return;
       }
 
@@ -302,6 +305,8 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
       parametersToUpdate.put(
           LatestPartitionUtils.LBC_LAST_EVENT_PARTITION_PROPERTY,
           timestampBounds.getLastTimestamp());
+      parametersToUpdate.put(
+          LatestPartitionUtils.LBC_PARTITION_TOTAL_PROPERTY, String.valueOf(totalPartitions));
 
       HierarchicalTableIdentifier tblIdentifier = toHierarchicalTableIdentifier(tableIdentifier);
       glueClient.updateTable(
@@ -320,9 +325,10 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
               .build());
     } catch (Exception ex) {
       log.warn(
-          "Unable to update {} and {} for table {}",
+          "Unable to update {}, {} and {} for table {}",
           LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY,
           LatestPartitionUtils.LBC_LAST_EVENT_PARTITION_PROPERTY,
+          LatestPartitionUtils.LBC_PARTITION_TOTAL_PROPERTY,
           tableIdentifier.getId(),
           ex);
     }
