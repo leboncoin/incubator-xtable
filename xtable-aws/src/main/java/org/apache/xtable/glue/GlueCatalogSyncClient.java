@@ -21,6 +21,9 @@ package org.apache.xtable.glue;
 import static org.apache.xtable.catalog.CatalogUtils.toHierarchicalTableIdentifier;
 
 import java.time.ZonedDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import lombok.extern.log4j.Log4j2;
@@ -32,13 +35,16 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.xtable.catalog.CatalogPartitionSyncTool;
 import org.apache.xtable.catalog.CatalogTableBuilder;
 import org.apache.xtable.catalog.CatalogUtils;
+import org.apache.xtable.catalog.LatestPartitionUtils;
 import org.apache.xtable.conversion.ExternalCatalogConfig;
 import org.apache.xtable.exception.CatalogSyncException;
+import org.apache.xtable.hudi.HudiPartitionPathUtils;
 import org.apache.xtable.model.InternalTable;
 import org.apache.xtable.model.catalog.CatalogTableIdentifier;
 import org.apache.xtable.model.catalog.HierarchicalTableIdentifier;
 import org.apache.xtable.model.catalog.ThreePartHierarchicalTableIdentifier;
 import org.apache.xtable.model.storage.CatalogType;
+import org.apache.xtable.model.storage.TableFormat;
 import org.apache.xtable.spi.sync.CatalogSyncClient;
 
 import software.amazon.awssdk.services.glue.GlueClient;
@@ -173,6 +179,7 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
     }
 
     partitionSyncTool.ifPresent(tool -> tool.syncPartitions(table, tableIdentifier));
+    updateLatestDateHourPartitionProperty(table, tableIdentifier);
   }
 
   @Override
@@ -194,6 +201,7 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
     }
 
     partitionSyncTool.ifPresent(tool -> tool.syncPartitions(table, tableIdentifier));
+    updateLatestDateHourPartitionProperty(table, tableIdentifier);
   }
 
   @Override
@@ -248,6 +256,72 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
     if (glueClient != null) {
       glueClient.close();
     }
+  }
+
+  private void updateLatestDateHourPartitionProperty(
+      InternalTable table, CatalogTableIdentifier tableIdentifier) {
+    if (!shouldUpdateLbcPartitionProperty(table)) {
+      return;
+    }
+
+    try {
+      Optional<List<String>> partitionPathsOpt =
+          HudiPartitionPathUtils.getAllPartitionPathsIfHudi(configuration, table.getBasePath());
+      if (!partitionPathsOpt.isPresent()) {
+        return;
+      }
+      Optional<String> latestPartition =
+          LatestPartitionUtils.getLatestDateHourPartitionTimestamp(partitionPathsOpt.get());
+      if (!latestPartition.isPresent()) {
+        return;
+      }
+
+      Table glueTable =
+          GlueCatalogTableUtils.getTable(
+              glueClient, glueCatalogConfig.getCatalogId(), tableIdentifier);
+      Map<String, String> currentParameters = glueTable.parameters();
+      if (currentParameters != null
+          && latestPartition
+              .get()
+              .equals(currentParameters.get(LatestPartitionUtils.LBC_PARTITION_PROPERTY))) {
+        return;
+      }
+
+      Map<String, String> parametersToUpdate = new HashMap<>();
+      if (currentParameters != null) {
+        parametersToUpdate.putAll(currentParameters);
+      }
+      parametersToUpdate.put(LatestPartitionUtils.LBC_PARTITION_PROPERTY, latestPartition.get());
+
+      HierarchicalTableIdentifier tblIdentifier = toHierarchicalTableIdentifier(tableIdentifier);
+      glueClient.updateTable(
+          UpdateTableRequest.builder()
+              .catalogId(glueCatalogConfig.getCatalogId())
+              .databaseName(tblIdentifier.getDatabaseName())
+              .skipArchive(true)
+              .tableInput(
+                  TableInput.builder()
+                      .name(tblIdentifier.getTableName())
+                      .tableType(glueTable.tableType())
+                      .parameters(parametersToUpdate)
+                      .partitionKeys(glueTable.partitionKeys())
+                      .storageDescriptor(glueTable.storageDescriptor())
+                      .build())
+              .build());
+    } catch (Exception ex) {
+      log.warn(
+          "Unable to update {} for table {}",
+          LatestPartitionUtils.LBC_PARTITION_PROPERTY,
+          tableIdentifier.getId(),
+          ex);
+    }
+  }
+
+  private boolean shouldUpdateLbcPartitionProperty(InternalTable table) {
+    return table.getPartitioningFields() != null
+        && !table.getPartitioningFields().isEmpty()
+        && (TableFormat.DELTA.equals(table.getTableFormat())
+            || TableFormat.ICEBERG.equals(table.getTableFormat()));
   }
 
   /**
