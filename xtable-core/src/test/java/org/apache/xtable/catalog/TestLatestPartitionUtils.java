@@ -31,42 +31,44 @@ import org.junit.jupiter.api.Test;
 public class TestLatestPartitionUtils {
 
   @Test
-  void testGetLatestDateHourPartitionTimestamp() {
-    Optional<String> latestPartition =
-        LatestPartitionUtils.getLatestDateHourPartitionTimestamp(
+  void testGetDateHourPartitionTimestampBounds() {
+    Optional<LatestPartitionUtils.PartitionTimestampBounds> bounds =
+        LatestPartitionUtils.getDateHourPartitionTimestampBounds(
             Arrays.asList(
                 "s3://bucket/table/event_date=2025-01-02/event_hour=03",
                 "s3://bucket/table/event_date=2025-01-02/event_hour=09",
                 "s3://bucket/table/event_date=2025-01-01/event_hour=23"));
 
-    assertTrue(latestPartition.isPresent());
-    assertEquals("2025-01-02T09:00:00Z", latestPartition.get());
+    assertTrue(bounds.isPresent());
+    assertEquals("2025-01-01T23:00:00Z", bounds.get().getFirstTimestamp());
+    assertEquals("2025-01-02T09:00:00Z", bounds.get().getLastTimestamp());
   }
 
   @Test
-  void testGetLatestDateHourPartitionTimestampByDateFirst() {
-    Optional<String> latestPartition =
-        LatestPartitionUtils.getLatestDateHourPartitionTimestamp(
+  void testGetDateHourPartitionTimestampBoundsByDateFirst() {
+    Optional<LatestPartitionUtils.PartitionTimestampBounds> bounds =
+        LatestPartitionUtils.getDateHourPartitionTimestampBounds(
             Arrays.asList(
                 "event_date=2024-10-10/event_hour=23", "event_date=2024-10-11/event_hour=01"));
 
-    assertTrue(latestPartition.isPresent());
-    assertEquals("2024-10-11T01:00:00Z", latestPartition.get());
+    assertTrue(bounds.isPresent());
+    assertEquals("2024-10-10T23:00:00Z", bounds.get().getFirstTimestamp());
+    assertEquals("2024-10-11T01:00:00Z", bounds.get().getLastTimestamp());
   }
 
   @Test
-  void testGetLatestDateHourPartitionTimestampWhenNoMatches() {
-    Optional<String> latestPartition =
-        LatestPartitionUtils.getLatestDateHourPartitionTimestamp(
+  void testGetDateHourPartitionTimestampBoundsWhenNoMatches() {
+    Optional<LatestPartitionUtils.PartitionTimestampBounds> bounds =
+        LatestPartitionUtils.getDateHourPartitionTimestampBounds(
             Arrays.asList("s3://bucket/table/date=2025-01-02/hour=09", "no-match"));
 
-    assertFalse(latestPartition.isPresent());
+    assertFalse(bounds.isPresent());
   }
 
   @Test
-  void testGetLatestDateHourPartitionTimestampWhenInputEmpty() {
+  void testGetDateHourPartitionTimestampBoundsWhenInputEmpty() {
     assertFalse(
-        LatestPartitionUtils.getLatestDateHourPartitionTimestamp(Collections.emptyList())
+        LatestPartitionUtils.getDateHourPartitionTimestampBounds(Collections.emptyList())
             .isPresent());
   }
 }

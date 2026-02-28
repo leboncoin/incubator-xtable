@@ -350,22 +350,29 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
       if (!partitionPathsOpt.isPresent()) {
         return;
       }
-      Optional<String> latestPartition =
-          LatestPartitionUtils.getLatestDateHourPartitionTimestamp(partitionPathsOpt.get());
-      if (!latestPartition.isPresent()) {
+      Optional<LatestPartitionUtils.PartitionTimestampBounds> timestampBoundsOpt =
+          LatestPartitionUtils.getDateHourPartitionTimestampBounds(partitionPathsOpt.get());
+      if (!timestampBoundsOpt.isPresent()) {
         return;
       }
+      LatestPartitionUtils.PartitionTimestampBounds timestampBounds = timestampBoundsOpt.get();
 
       String setPropertyStatement =
           String.format(
-              "ALTER TABLE %s SET TBLPROPERTIES ('%s' = '%s')",
+              "ALTER TABLE %s SET TBLPROPERTIES ('%s' = '%s', '%s' = '%s')",
               fullName,
-              LatestPartitionUtils.LBC_PARTITION_PROPERTY,
-              escapeSqlString(latestPartition.get()));
+              LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY,
+              escapeSqlString(timestampBounds.getFirstTimestamp()),
+              LatestPartitionUtils.LBC_LAST_EVENT_PARTITION_PROPERTY,
+              escapeSqlString(timestampBounds.getLastTimestamp()));
       executeStatement(setPropertyStatement);
     } catch (Exception ex) {
       log.warn(
-          "Unable to update {} for {}", LatestPartitionUtils.LBC_PARTITION_PROPERTY, fullName, ex);
+          "Unable to update {} and {} for {}",
+          LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY,
+          LatestPartitionUtils.LBC_LAST_EVENT_PARTITION_PROPERTY,
+          fullName,
+          ex);
     }
   }
 

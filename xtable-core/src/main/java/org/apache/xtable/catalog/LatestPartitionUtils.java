@@ -29,36 +29,56 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class LatestPartitionUtils {
 
-  public static final String LBC_PARTITION_PROPERTY = "lbc.last_event_partition";
+  public static final String LBC_FIRST_EVENT_PARTITION_PROPERTY = "lbc.first_event_partition";
+  public static final String LBC_LAST_EVENT_PARTITION_PROPERTY = "lbc.last_event_partition";
 
   private static final Pattern DATE_HOUR_PARTITION_PATTERN =
       Pattern.compile(
           "([A-Za-z0-9_-]+_date=(\\d{4}-\\d{2}-\\d{2}))/([A-Za-z0-9_-]+_hour=(\\d{2}))(?=/|$)");
 
-  public static Optional<String> getLatestDateHourPartitionTimestamp(
+  public static Optional<PartitionTimestampBounds> getDateHourPartitionTimestampBounds(
       Collection<String> partitionPaths) {
     if (partitionPaths == null || partitionPaths.isEmpty()) {
       return Optional.empty();
     }
 
-    return partitionPaths.stream()
-        .map(LatestPartitionUtils::parsePartitionPath)
-        .filter(Optional::isPresent)
-        .map(Optional::get)
-        .max(
-            Comparator.comparing(DateHourPartition::getDate)
-                .thenComparing(DateHourPartition::getHour))
-        .map(
-            partition ->
-                LocalDateTime.of(
-                        partition.getDate(), java.time.LocalTime.of(partition.getHour(), 0))
-                    .toInstant(ZoneOffset.UTC)
-                    .toString());
+    Optional<DateHourPartition> firstPartition =
+        partitionPaths.stream()
+            .map(LatestPartitionUtils::parsePartitionPath)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .min(
+                Comparator.comparing(DateHourPartition::getDate)
+                    .thenComparing(DateHourPartition::getHour));
+    Optional<DateHourPartition> lastPartition =
+        partitionPaths.stream()
+            .map(LatestPartitionUtils::parsePartitionPath)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .max(
+                Comparator.comparing(DateHourPartition::getDate)
+                    .thenComparing(DateHourPartition::getHour));
+
+    if (!firstPartition.isPresent() || !lastPartition.isPresent()) {
+      return Optional.empty();
+    }
+
+    return Optional.of(
+        new PartitionTimestampBounds(
+            toUtcHourString(firstPartition.get()), toUtcHourString(lastPartition.get())));
+  }
+
+  private static String toUtcHourString(DateHourPartition partition) {
+    return LocalDateTime.of(partition.getDate(), java.time.LocalTime.of(partition.getHour(), 0))
+        .toInstant(ZoneOffset.UTC)
+        .toString();
   }
 
   private static Optional<DateHourPartition> parsePartitionPath(String partitionPath) {
@@ -98,5 +118,12 @@ public class LatestPartitionUtils {
     private int getHour() {
       return hour;
     }
+  }
+
+  @Getter
+  @AllArgsConstructor(access = AccessLevel.PRIVATE)
+  public static final class PartitionTimestampBounds {
+    private final String firstTimestamp;
+    private final String lastTimestamp;
   }
 }
