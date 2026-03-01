@@ -36,9 +36,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class LatestPartitionUtils {
 
-  public static final String LBC_FIRST_EVENT_PARTITION_PROPERTY = "lbc.first_event_partition";
-  public static final String LBC_LAST_EVENT_PARTITION_PROPERTY = "lbc.last_event_partition";
-  public static final String LBC_PARTITION_TOTAL_PROPERTY = "lbc.partition.total";
+  public static final String LBC_PARTITION_FIRST_TS_PROPERTY = "lbc.partition.first_ts";
+  public static final String LBC_PARTITION_LAST_TS_PROPERTY = "lbc.partition.last_ts";
+  public static final String LBC_PARTITION_COUNT_PROPERTY = "lbc.partition.count";
 
   private static final Pattern DATE_HOUR_PARTITION_PATTERN =
       Pattern.compile(

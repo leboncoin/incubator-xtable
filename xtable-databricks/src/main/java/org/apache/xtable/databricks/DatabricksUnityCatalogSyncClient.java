@@ -362,19 +362,19 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
           String.format(
               "ALTER TABLE %s SET TBLPROPERTIES ('%s' = '%s', '%s' = '%s', '%s' = '%s')",
               fullName,
-              LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY,
+              LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY,
               escapeSqlString(timestampBounds.getFirstTimestamp()),
-              LatestPartitionUtils.LBC_LAST_EVENT_PARTITION_PROPERTY,
+              LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY,
               escapeSqlString(timestampBounds.getLastTimestamp()),
-              LatestPartitionUtils.LBC_PARTITION_TOTAL_PROPERTY,
+              LatestPartitionUtils.LBC_PARTITION_COUNT_PROPERTY,
               String.valueOf(totalPartitions));
       executeStatement(setPropertyStatement);
     } catch (Exception ex) {
       log.warn(
           "Unable to update {}, {} and {} for {}",
-          LatestPartitionUtils.LBC_FIRST_EVENT_PARTITION_PROPERTY,
-          LatestPartitionUtils.LBC_LAST_EVENT_PARTITION_PROPERTY,
-          LatestPartitionUtils.LBC_PARTITION_TOTAL_PROPERTY,
+          LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY,
+          LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY,
+          LatestPartitionUtils.LBC_PARTITION_COUNT_PROPERTY,
           fullName,
           ex);
     }
