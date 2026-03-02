@@ -39,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.apache.avro.Conversions;
@@ -282,6 +283,53 @@ public class TestHudiFileStatsExtractor {
     assertEquals(1, output.size());
     assertEquals(2, output.get(0).getRecordCount());
     assertEquals(0, output.get(0).getColumnStats().size());
+  }
+
+  @Test
+  void recordCountOnlyWithoutMetadataTable_parallelFallbackIsThreadSafe(@TempDir Path tempDir)
+      throws IOException {
+    Path file = tempDir.resolve("tmp.parquet");
+    GenericData genericData = GenericData.get();
+    genericData.addLogicalTypeConversion(new Conversions.DecimalConversion());
+    try (ParquetWriter<GenericRecord> writer =
+        AvroParquetWriter.<GenericRecord>builder(
+                HadoopOutputFile.fromPath(
+                    new org.apache.hadoop.fs.Path(file.toUri()), configuration))
+            .withSchema(AVRO_SCHEMA)
+            .withDataModel(genericData)
+            .build()) {
+      for (GenericRecord record : getRecords()) {
+        writer.write(record);
+      }
+    }
+
+    HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class);
+    when(mockMetaClient.getHadoopConf()).thenReturn(configuration);
+    HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(mockMetaClient);
+
+    List<InternalDataFile> inputFiles =
+        IntStream.range(0, 200)
+            .mapToObj(
+                i ->
+                    InternalDataFile.builder()
+                        .physicalPath(file.toString())
+                        .columnStats(Collections.emptyList())
+                        .fileFormat(FileFormat.APACHE_PARQUET)
+                        .lastModified(1234L)
+                        .fileSizeBytes(4321L)
+                        .recordCount(0)
+                        .build())
+            .collect(Collectors.toList());
+
+    List<InternalDataFile> output =
+        fileStatsExtractor
+            .addRecordCountToFiles(null, inputFiles.stream(), schema)
+            .collect(Collectors.toList());
+
+    assertEquals(200, output.size());
+    assertTrue(output.stream().allMatch(fileWithCount -> fileWithCount.getRecordCount() == 2));
+    assertTrue(
+        output.stream().allMatch(fileWithCount -> fileWithCount.getColumnStats().isEmpty()));
   }
 
   private void validateOutput(List<InternalDataFile> output) {
