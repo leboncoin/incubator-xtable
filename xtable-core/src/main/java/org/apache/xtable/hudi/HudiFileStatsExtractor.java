@@ -141,7 +141,11 @@ public class HudiFileStatsExtractor {
 
   private Stream<InternalDataFile> computeRecordCountFromParquetFooters(
       Stream<InternalDataFile> files) {
-    return files.map(
+    // Use the common ForkJoinPool for footer reads; parallelism can be tuned via
+    // -Djava.util.concurrent.ForkJoinPool.common.parallelism.
+    return files
+        .parallel()
+        .map(
         file ->
             file.toBuilder()
                 .recordCount(
