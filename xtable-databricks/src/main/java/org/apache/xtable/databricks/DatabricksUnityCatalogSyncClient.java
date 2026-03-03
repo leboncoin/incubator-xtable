@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import lombok.extern.log4j.Log4j2;
 
@@ -46,8 +47,10 @@ import com.databricks.sdk.service.sql.StatementResponse;
 import com.databricks.sdk.service.sql.StatementState;
 
 import org.apache.xtable.catalog.CatalogUtils;
+import org.apache.xtable.catalog.LatestPartitionUtils;
 import org.apache.xtable.conversion.ExternalCatalogConfig;
 import org.apache.xtable.exception.CatalogSyncException;
+import org.apache.xtable.hudi.HudiPartitionPathUtils;
 import org.apache.xtable.model.InternalTable;
 import org.apache.xtable.model.catalog.CatalogTableIdentifier;
 import org.apache.xtable.model.catalog.HierarchicalTableIdentifier;
@@ -188,6 +191,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
             fullName, escapeSqlString(location));
     log.info("Databricks UC create table: {}", fullName);
     executeStatement(statement);
+    updateLatestDateHourPartitionProperty(table, fullName);
   }
 
   @Override
@@ -215,6 +219,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
       log.info(
           "Databricks UC refreshTable: schema already up to date for {}", tableIdentifier.getId());
     }
+    updateLatestDateHourPartitionProperty(table, getFullName(tableIdentifier));
   }
 
   @Override
@@ -332,6 +337,54 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
 
   private static String escapeSqlString(String value) {
     return value.replace("'", "''");
+  }
+
+  private void updateLatestDateHourPartitionProperty(InternalTable table, String fullName) {
+    if (!shouldUpdateLbcPartitionProperty(table)) {
+      return;
+    }
+
+    try {
+      Optional<java.util.List<String>> partitionPathsOpt =
+          HudiPartitionPathUtils.getAllPartitionPathsIfHudi(hadoopConf, table.getBasePath());
+      if (!partitionPathsOpt.isPresent()) {
+        return;
+      }
+      int totalPartitions = partitionPathsOpt.get().size();
+      Optional<LatestPartitionUtils.PartitionTimestampBounds> timestampBoundsOpt =
+          LatestPartitionUtils.getDateHourPartitionTimestampBounds(partitionPathsOpt.get());
+      if (!timestampBoundsOpt.isPresent()) {
+        return;
+      }
+      LatestPartitionUtils.PartitionTimestampBounds timestampBounds = timestampBoundsOpt.get();
+
+      String setPropertyStatement =
+          String.format(
+              "ALTER TABLE %s SET TBLPROPERTIES ('%s' = '%s', '%s' = '%s', '%s' = '%s')",
+              fullName,
+              LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY,
+              escapeSqlString(timestampBounds.getFirstTimestamp()),
+              LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY,
+              escapeSqlString(timestampBounds.getLastTimestamp()),
+              LatestPartitionUtils.LBC_PARTITION_COUNT_PROPERTY,
+              String.valueOf(totalPartitions));
+      executeStatement(setPropertyStatement);
+    } catch (Exception ex) {
+      log.warn(
+          "Unable to update {}, {} and {} for {}",
+          LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY,
+          LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY,
+          LatestPartitionUtils.LBC_PARTITION_COUNT_PROPERTY,
+          fullName,
+          ex);
+    }
+  }
+
+  private boolean shouldUpdateLbcPartitionProperty(InternalTable table) {
+    return table.getPartitioningFields() != null
+        && !table.getPartitioningFields().isEmpty()
+        && (TableFormat.DELTA.equals(table.getTableFormat())
+            || TableFormat.ICEBERG.equals(table.getTableFormat()));
   }
 
   private static boolean schemasMatch(InternalSchema desired, TableInfo existing) {
