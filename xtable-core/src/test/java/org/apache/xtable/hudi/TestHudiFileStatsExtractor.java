@@ -288,7 +288,8 @@ public class TestHudiFileStatsExtractor {
 
     assertEquals(200, output.size());
     assertTrue(output.stream().allMatch(fileWithStats -> fileWithStats.getRecordCount() == 2));
-    assertTrue(output.stream().allMatch(fileWithStats -> fileWithStats.getColumnStats().size() == 9));
+    assertTrue(
+        output.stream().allMatch(fileWithStats -> fileWithStats.getColumnStats().size() == 9));
   }
 
   @Test
@@ -374,8 +375,7 @@ public class TestHudiFileStatsExtractor {
 
     assertEquals(200, output.size());
     assertTrue(output.stream().allMatch(fileWithCount -> fileWithCount.getRecordCount() == 2));
-    assertTrue(
-        output.stream().allMatch(fileWithCount -> fileWithCount.getColumnStats().isEmpty()));
+    assertTrue(output.stream().allMatch(fileWithCount -> fileWithCount.getColumnStats().isEmpty()));
   }
 
   private void validateOutput(List<InternalDataFile> output) {
