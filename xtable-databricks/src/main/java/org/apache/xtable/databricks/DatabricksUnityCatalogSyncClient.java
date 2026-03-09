@@ -381,7 +381,9 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
   }
 
   private boolean shouldUpdateLbcPartitionProperty(InternalTable table) {
-    return table.getPartitioningFields() != null
+    return LatestPartitionUtils.isLbcPartitionPropertiesEnabled(
+            catalogConfig.getCatalogProperties())
+        && table.getPartitioningFields() != null
         && !table.getPartitioningFields().isEmpty()
         && (TableFormat.DELTA.equals(table.getTableFormat())
             || TableFormat.ICEBERG.equals(table.getTableFormat()));

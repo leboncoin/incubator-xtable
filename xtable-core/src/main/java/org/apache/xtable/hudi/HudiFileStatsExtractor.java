@@ -146,11 +146,12 @@ public class HudiFileStatsExtractor {
     return files
         .parallel()
         .map(
-        file ->
-            file.toBuilder()
-                .recordCount(
-                    UTILS.getRowCount(metaClient.getHadoopConf(), new Path(file.getPhysicalPath())))
-                .build());
+            file ->
+                file.toBuilder()
+                    .recordCount(
+                        UTILS.getRowCount(
+                            metaClient.getHadoopConf(), new Path(file.getPhysicalPath())))
+                    .build());
   }
 
   private Pair<String, String> getPartitionAndFileName(String path) {

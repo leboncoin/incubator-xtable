@@ -288,8 +288,7 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
               .equals(currentParameters.get(LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY))
           && timestampBounds
               .getFirstTimestamp()
-              .equals(
-                  currentParameters.get(LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY))
+              .equals(currentParameters.get(LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY))
           && String.valueOf(totalPartitions)
               .equals(currentParameters.get(LatestPartitionUtils.LBC_PARTITION_COUNT_PROPERTY))) {
         return;
@@ -303,8 +302,7 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
           LatestPartitionUtils.LBC_PARTITION_FIRST_TS_PROPERTY,
           timestampBounds.getFirstTimestamp());
       parametersToUpdate.put(
-          LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY,
-          timestampBounds.getLastTimestamp());
+          LatestPartitionUtils.LBC_PARTITION_LAST_TS_PROPERTY, timestampBounds.getLastTimestamp());
       parametersToUpdate.put(
           LatestPartitionUtils.LBC_PARTITION_COUNT_PROPERTY, String.valueOf(totalPartitions));
 
@@ -335,7 +333,9 @@ public class GlueCatalogSyncClient implements CatalogSyncClient<Table> {
   }
 
   private boolean shouldUpdateLbcPartitionProperty(InternalTable table) {
-    return table.getPartitioningFields() != null
+    return LatestPartitionUtils.isLbcPartitionPropertiesEnabled(
+            catalogConfig.getCatalogProperties())
+        && table.getPartitioningFields() != null
         && !table.getPartitioningFields().isEmpty()
         && (TableFormat.DELTA.equals(table.getTableFormat())
             || TableFormat.ICEBERG.equals(table.getTableFormat()));

@@ -24,6 +24,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,6 +40,8 @@ public class LatestPartitionUtils {
   public static final String LBC_PARTITION_FIRST_TS_PROPERTY = "lbc.partition.first_ts";
   public static final String LBC_PARTITION_LAST_TS_PROPERTY = "lbc.partition.last_ts";
   public static final String LBC_PARTITION_COUNT_PROPERTY = "lbc.partition.count";
+  public static final String LBC_PARTITION_PROPERTIES_ENABLED =
+      "xtable.lbc.partition.properties.enabled";
 
   private static final Pattern DATE_HOUR_PARTITION_PATTERN =
       Pattern.compile(
@@ -74,6 +77,22 @@ public class LatestPartitionUtils {
     return Optional.of(
         new PartitionTimestampBounds(
             toUtcHourString(firstPartition.get()), toUtcHourString(lastPartition.get())));
+  }
+
+  public static boolean isLbcPartitionPropertiesEnabled(Map<String, String> catalogProperties) {
+    if (catalogProperties == null) {
+      return true;
+    }
+    String raw = catalogProperties.get(LBC_PARTITION_PROPERTIES_ENABLED);
+    if (raw == null) {
+      return true;
+    }
+
+    String normalized = raw.trim().toLowerCase();
+    return !("false".equals(normalized)
+        || "0".equals(normalized)
+        || "no".equals(normalized)
+        || "off".equals(normalized));
   }
 
   private static String toUtcHourString(DateHourPartition partition) {

@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.databricks.sdk.core.error.platform.NotFound;
@@ -50,13 +52,17 @@ import com.databricks.sdk.service.sql.StatementResponse;
 import com.databricks.sdk.service.sql.StatementState;
 import com.databricks.sdk.service.sql.StatementStatus;
 
+import org.apache.xtable.catalog.LatestPartitionUtils;
 import org.apache.xtable.conversion.ExternalCatalogConfig;
 import org.apache.xtable.exception.CatalogSyncException;
+import org.apache.xtable.hudi.HudiPartitionPathUtils;
 import org.apache.xtable.model.InternalTable;
 import org.apache.xtable.model.catalog.ThreePartHierarchicalTableIdentifier;
 import org.apache.xtable.model.schema.InternalField;
+import org.apache.xtable.model.schema.InternalPartitionField;
 import org.apache.xtable.model.schema.InternalSchema;
 import org.apache.xtable.model.schema.InternalType;
+import org.apache.xtable.model.schema.PartitionTransformType;
 import org.apache.xtable.model.storage.CatalogType;
 import org.apache.xtable.model.storage.TableFormat;
 
@@ -108,6 +114,61 @@ public class TestDatabricksUnityCatalogSyncClient {
     assertEquals(
         "CREATE TABLE IF NOT EXISTS main.default.people USING DELTA LOCATION 's3://bucket/path'",
         request.getStatement());
+  }
+
+  @Test
+  void testCreateTableDelta_SkipsLbcPartitionPropertiesWhenFeatureFlagDisabled() {
+    Map<String, String> props = new HashMap<>();
+    props.put(DatabricksUnityCatalogConfig.HOST, "https://example.cloud.databricks.com");
+    props.put(DatabricksUnityCatalogConfig.WAREHOUSE_ID, "wh-1");
+    props.put(LatestPartitionUtils.LBC_PARTITION_PROPERTIES_ENABLED, "false");
+    ExternalCatalogConfig config =
+        ExternalCatalogConfig.builder()
+            .catalogId("uc")
+            .catalogType(CatalogType.DATABRICKS_UC)
+            .catalogProperties(props)
+            .build();
+
+    DatabricksUnityCatalogSyncClient client =
+        new DatabricksUnityCatalogSyncClient(
+            config,
+            TableFormat.DELTA,
+            new Configuration(),
+            mockStatementExecution,
+            mockTablesApi,
+            mockSchemasApi);
+
+    when(mockStatementExecution.executeStatement(any(ExecuteStatementRequest.class)))
+        .thenReturn(
+            new StatementResponse()
+                .setStatus(new StatementStatus().setState(StatementState.SUCCEEDED)));
+
+    InternalPartitionField partitionField =
+        InternalPartitionField.builder()
+            .sourceField(
+                InternalField.builder()
+                    .name("partitionField")
+                    .schema(
+                        InternalSchema.builder()
+                            .name("string")
+                            .dataType(InternalType.STRING)
+                            .build())
+                    .build())
+            .transformType(PartitionTransformType.VALUE)
+            .build();
+    InternalTable table =
+        InternalTable.builder()
+            .basePath("s3://bucket/path")
+            .partitioningFields(java.util.Collections.singletonList(partitionField))
+            .build();
+    ThreePartHierarchicalTableIdentifier tableIdentifier =
+        new ThreePartHierarchicalTableIdentifier("main", "default", "people");
+
+    try (MockedStatic<HudiPartitionPathUtils> mockedPartitionUtils =
+        mockStatic(HudiPartitionPathUtils.class)) {
+      client.createTable(table, tableIdentifier);
+      mockedPartitionUtils.verifyNoInteractions();
+    }
   }
 
   @Test

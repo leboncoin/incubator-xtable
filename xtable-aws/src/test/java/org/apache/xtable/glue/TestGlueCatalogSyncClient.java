@@ -35,6 +35,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.ZonedDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
@@ -48,7 +49,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.apache.xtable.catalog.CatalogPartitionSyncTool;
 import org.apache.xtable.catalog.CatalogTableBuilder;
+import org.apache.xtable.catalog.LatestPartitionUtils;
+import org.apache.xtable.conversion.ExternalCatalogConfig;
 import org.apache.xtable.exception.CatalogSyncException;
+import org.apache.xtable.hudi.HudiPartitionPathUtils;
 import org.apache.xtable.hudi.catalog.HudiCatalogPartitionSyncTool;
 import org.apache.xtable.model.catalog.ThreePartHierarchicalTableIdentifier;
 import org.apache.xtable.model.storage.CatalogType;
@@ -83,6 +87,19 @@ public class TestGlueCatalogSyncClient extends GlueCatalogSyncTestBase {
         includePartitionSyncTool ? Optional.of(mockPartitionSyncTool) : Optional.empty();
     return new GlueCatalogSyncClient(
         catalogConfig,
+        testConfiguration,
+        mockGlueCatalogConfig,
+        mockGlueClient,
+        mockTableBuilder,
+        partitionSyncToolOpt);
+  }
+
+  private GlueCatalogSyncClient createGlueCatalogSyncClient(
+      boolean includePartitionSyncTool, ExternalCatalogConfig externalCatalogConfig) {
+    Optional<CatalogPartitionSyncTool> partitionSyncToolOpt =
+        includePartitionSyncTool ? Optional.of(mockPartitionSyncTool) : Optional.empty();
+    return new GlueCatalogSyncClient(
+        externalCatalogConfig,
         testConfiguration,
         mockGlueCatalogConfig,
         mockGlueClient,
@@ -262,6 +279,35 @@ public class TestGlueCatalogSyncClient extends GlueCatalogSyncTestBase {
     } else {
       verify(mockPartitionSyncTool, never())
           .syncPartitions(eq(TEST_ICEBERG_INTERNAL_TABLE), eq(TEST_CATALOG_TABLE_IDENTIFIER));
+    }
+  }
+
+  @Test
+  void testCreateTable_SkipsLbcPartitionPropertiesWhenFeatureFlagDisabled() {
+    setupCommonMocks();
+    HashMap<String, String> props = new HashMap<>();
+    props.put(LatestPartitionUtils.LBC_PARTITION_PROPERTIES_ENABLED, "false");
+    ExternalCatalogConfig configWithFlagDisabled =
+        ExternalCatalogConfig.builder()
+            .catalogId(TEST_CATALOG_NAME)
+            .catalogType(CatalogType.GLUE)
+            .catalogSyncClientImpl(GlueCatalogSyncClient.class.getCanonicalName())
+            .catalogProperties(props)
+            .build();
+
+    glueCatalogSyncClient = createGlueCatalogSyncClient(false, configWithFlagDisabled);
+    CreateTableRequest createTableRequest =
+        createTableRequest(TEST_CATALOG_TABLE_IDENTIFIER.getDatabaseName(), TEST_TABLE_INPUT);
+    when(mockTableBuilder.getCreateTableRequest(
+            TEST_ICEBERG_INTERNAL_TABLE, TEST_CATALOG_TABLE_IDENTIFIER))
+        .thenReturn(TEST_TABLE_INPUT);
+    when(mockGlueClient.createTable(createTableRequest))
+        .thenReturn(CreateTableResponse.builder().build());
+
+    try (MockedStatic<HudiPartitionPathUtils> mockedPartitionUtils =
+        mockStatic(HudiPartitionPathUtils.class)) {
+      glueCatalogSyncClient.createTable(TEST_ICEBERG_INTERNAL_TABLE, TEST_CATALOG_TABLE_IDENTIFIER);
+      mockedPartitionUtils.verifyNoInteractions();
     }
   }
 
