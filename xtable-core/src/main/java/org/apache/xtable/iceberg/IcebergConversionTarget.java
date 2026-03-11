@@ -62,6 +62,7 @@ public class IcebergConversionTarget implements ConversionTarget {
   private String basePath;
   private TableIdentifier tableIdentifier;
   private IcebergCatalogConfig catalogConfig;
+  private boolean enableIdentifierFields;
   private Configuration configuration;
   private int snapshotRetentionInHours;
   private Transaction transaction;
@@ -116,6 +117,12 @@ public class IcebergConversionTarget implements ConversionTarget {
             : TableIdentifier.of(Namespace.of(namespace), tableName);
     this.tableManager = tableManager;
     this.catalogConfig = (IcebergCatalogConfig) targetTable.getCatalogConfig();
+    this.enableIdentifierFields =
+        catalogConfig != null
+            && Boolean.parseBoolean(
+                catalogConfig
+                    .getCatalogOptions()
+                    .getOrDefault(IcebergCatalogConfig.ENABLE_IDENTIFIER_FIELDS, "false"));
 
     if (tableManager.tableExists(catalogConfig, tableIdentifier, basePath)) {
       // Load the table state if it already exists
@@ -154,16 +161,17 @@ public class IcebergConversionTarget implements ConversionTarget {
               catalogConfig,
               tableIdentifier,
               basePath,
-              schemaExtractor.toIceberg(internalTable.getReadSchema()),
+              schemaExtractor.toIceberg(internalTable.getReadSchema(), enableIdentifierFields),
               partitionSpecExtractor.toIceberg(
                   internalTable.getPartitioningFields(),
-                  schemaExtractor.toIceberg(internalTable.getReadSchema())));
+                  schemaExtractor.toIceberg(
+                      internalTable.getReadSchema(), enableIdentifierFields)));
     }
   }
 
   @Override
   public void syncSchema(InternalSchema schema) {
-    Schema latestSchema = schemaExtractor.toIceberg(schema);
+    Schema latestSchema = schemaExtractor.toIceberg(schema, enableIdentifierFields);
     schemaSync.sync(transaction.table().schema(), latestSchema, transaction);
   }
 

@@ -1044,4 +1044,57 @@ public class TestIcebergSchemaExtractor {
     Assertions.assertTrue(
         icebergRepresentation.sameSchema(SCHEMA_EXTRACTOR.toIceberg(internalSchema)));
   }
+
+  @Test
+  public void testIdentifierFieldsDisabledByDefault() {
+    InternalField eventIdField =
+        InternalField.builder()
+            .name("event_id")
+            .fieldId(1)
+            .schema(
+                InternalSchema.builder()
+                    .name("string")
+                    .dataType(InternalType.STRING)
+                    .isNullable(false)
+                    .build())
+            .build();
+    InternalSchema internalSchema =
+        InternalSchema.builder()
+            .name("record")
+            .dataType(InternalType.RECORD)
+            .isNullable(false)
+            .fields(Collections.singletonList(eventIdField))
+            .recordKeyFields(Collections.singletonList(eventIdField))
+            .build();
+
+    Assertions.assertEquals(
+        0, SCHEMA_EXTRACTOR.toIceberg(internalSchema).identifierFieldIds().size());
+  }
+
+  @Test
+  public void testIdentifierFieldsCanBeEnabled() {
+    InternalField eventIdField =
+        InternalField.builder()
+            .name("event_id")
+            .fieldId(1)
+            .schema(
+                InternalSchema.builder()
+                    .name("string")
+                    .dataType(InternalType.STRING)
+                    .isNullable(false)
+                    .build())
+            .build();
+    InternalSchema internalSchema =
+        InternalSchema.builder()
+            .name("record")
+            .dataType(InternalType.RECORD)
+            .isNullable(false)
+            .fields(Collections.singletonList(eventIdField))
+            .recordKeyFields(Collections.singletonList(eventIdField))
+            .build();
+
+    Assertions.assertEquals(
+        Collections.singleton(1),
+        SCHEMA_EXTRACTOR.toIceberg(internalSchema, true).identifierFieldIds());
+  }
 }

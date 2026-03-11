@@ -63,9 +63,16 @@ public class IcebergSchemaExtractor {
   }
 
   public Schema toIceberg(InternalSchema internalSchema) {
+    return toIceberg(internalSchema, false);
+  }
+
+  public Schema toIceberg(InternalSchema internalSchema, boolean enableIdentifierFields) {
     // if field IDs are not assigned in the source, just use an incrementing integer
     AtomicInteger fieldIdTracker = new AtomicInteger(0);
     List<Types.NestedField> nestedFields = convertFields(internalSchema, fieldIdTracker);
+    if (!enableIdentifierFields) {
+      return new Schema(nestedFields);
+    }
     List<InternalField> recordKeyFields = internalSchema.getRecordKeyFields();
     boolean recordKeyFieldsAreNotRequired =
         recordKeyFields.stream().anyMatch(f -> f.getSchema().isNullable());

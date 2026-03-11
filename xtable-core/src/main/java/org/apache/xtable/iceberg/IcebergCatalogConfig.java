@@ -36,6 +36,8 @@ import org.apache.xtable.conversion.CatalogConfig;
 @Value
 @Builder
 public class IcebergCatalogConfig implements CatalogConfig {
+  public static final String ENABLE_IDENTIFIER_FIELDS = "enableIdentifierFields";
+
   @NonNull String catalogName;
   @NonNull String catalogImpl;
   @NonNull @Builder.Default Map<String, String> catalogOptions = Collections.emptyMap();
