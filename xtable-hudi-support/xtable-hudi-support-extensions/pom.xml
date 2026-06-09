@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.xtable</groupId>
         <artifactId>xtable-hudi-support</artifactId>
-        <version>0.3.0-incubating</version>
+        <version>0.3.0-lbc-delta33-SNAPSHOT</version>
     </parent>
 
     <artifactId>xtable-hudi-support-extensions_${scala.binary.version}</artifactId>

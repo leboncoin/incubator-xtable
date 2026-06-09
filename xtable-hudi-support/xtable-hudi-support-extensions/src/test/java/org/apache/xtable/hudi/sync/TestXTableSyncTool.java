@@ -124,7 +124,7 @@ public class TestXTableSyncTool {
     Row row2 = RowFactory.create("key2", partition, timestamp, "value2");
     Row row3 = RowFactory.create("key3", partition, timestamp, "value3");
     spark
-        .createDataset(Arrays.asList(row1, row2, row3), RowEncoder.apply(schema))
+        .createDataset(Arrays.asList(row1, row2, row3), RowEncoder.encoderFor(schema))
         .write()
         .format("hudi")
         .options(options)

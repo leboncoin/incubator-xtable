@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.xtable</groupId>
         <artifactId>xtable</artifactId>
-        <version>0.3.0-incubating</version>
+        <version>0.3.0-lbc-delta33-SNAPSHOT</version>
     </parent>
 
     <artifactId>xtable-hive-metastore</artifactId>
