@@ -29,7 +29,7 @@
     <artifactId>xtable</artifactId>
     <name>XTable Project Parent POM</name>
     <inceptionYear>2024</inceptionYear>
-    <version>0.3.0-lbc-delta33-SNAPSHOT</version>
+    <version>0.3.0-incubating</version>
     <packaging>pom</packaging>
     <url>https://xtable.apache.org/</url>
 
