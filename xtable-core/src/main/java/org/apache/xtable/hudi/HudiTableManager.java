@@ -34,6 +34,7 @@ import org.apache.hudi.common.model.HoodieTimelineTimeZone;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.util.VisibleForTesting;
 import org.apache.hudi.exception.TableNotFoundException;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 
 import org.apache.xtable.exception.PartitionSpecException;
 import org.apache.xtable.exception.UpdateException;
@@ -68,7 +69,7 @@ public class HudiTableManager {
       return Optional.of(
           HoodieTableMetaClient.builder()
               .setBasePath(tableDataPath)
-              .setConf(configuration)
+              .setConf(HadoopFSUtils.getStorageConf(configuration))
               .setLoadActiveTimelineOnLoad(false)
               .build());
     } catch (TableNotFoundException ex) {
@@ -117,7 +118,7 @@ public class HudiTableManager {
                   .map(InternalPartitionField::getSourceField)
                   .map(InternalField::getPath)
                   .collect(Collectors.joining(",")))
-          .initTable(configuration, tableDataPath);
+          .initTable(HadoopFSUtils.getStorageConf(configuration), tableDataPath);
     } catch (IOException ex) {
       throw new UpdateException("Unable to initialize Hudi table", ex);
     }

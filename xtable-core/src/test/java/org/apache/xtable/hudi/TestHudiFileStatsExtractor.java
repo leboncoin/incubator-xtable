@@ -64,6 +64,10 @@ import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.metadata.HoodieTableMetadata;
+import org.apache.hudi.storage.HoodieStorage;
+import org.apache.hudi.storage.HoodieStorageUtils;
+import org.apache.hudi.storage.StorageConfiguration;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 
 import org.apache.xtable.GenericTable;
 import org.apache.xtable.TestJavaHudiTable;
@@ -83,6 +87,8 @@ public class TestHudiFileStatsExtractor {
       AVRO_SCHEMA.getField("nested_record").schema().getTypes().get(1);
 
   private final Configuration configuration = new Configuration();
+  private final StorageConfiguration<?> storageConf =
+      HadoopFSUtils.getStorageConf(configuration);
   private final InternalField nestedIntBase = getNestedIntBase();
   private final InternalSchema nestedSchema = getNestedSchema(nestedIntBase, "nested_record");
   private final InternalField longField = getLongField();
@@ -135,7 +141,8 @@ public class TestHudiFileStatsExtractor {
     }
     HoodieTableMetadata tableMetadata =
         HoodieTableMetadata.create(
-            new HoodieJavaEngineContext(configuration),
+            new HoodieJavaEngineContext(storageConf),
+            HoodieStorageUtils.getStorage(basePath, storageConf),
             HoodieMetadataConfig.newBuilder().enable(true).build(),
             basePath,
             true);
@@ -154,7 +161,7 @@ public class TestHudiFileStatsExtractor {
             .recordCount(0)
             .build();
     HoodieTableMetaClient metaClient =
-        HoodieTableMetaClient.builder().setBasePath(basePath).setConf(configuration).build();
+        HoodieTableMetaClient.builder().setBasePath(basePath).setConf(storageConf).build();
     HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(metaClient);
     List<InternalDataFile> output =
         fileStatsExtractor
@@ -177,7 +184,8 @@ public class TestHudiFileStatsExtractor {
     }
     HoodieTableMetadata tableMetadata =
         HoodieTableMetadata.create(
-            new HoodieJavaEngineContext(configuration),
+            new HoodieJavaEngineContext(storageConf),
+            HoodieStorageUtils.getStorage(basePath, storageConf),
             HoodieMetadataConfig.newBuilder().enable(true).build(),
             basePath,
             true);
@@ -196,7 +204,7 @@ public class TestHudiFileStatsExtractor {
             .recordCount(0)
             .build();
     HoodieTableMetaClient metaClient =
-        HoodieTableMetaClient.builder().setBasePath(basePath).setConf(configuration).build();
+        HoodieTableMetaClient.builder().setBasePath(basePath).setConf(storageConf).build();
     HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(metaClient);
     List<InternalDataFile> output =
         fileStatsExtractor
@@ -236,7 +244,8 @@ public class TestHudiFileStatsExtractor {
             .build();
 
     HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class);
-    when(mockMetaClient.getHadoopConf()).thenReturn(configuration);
+    when(mockMetaClient.getStorage())
+        .thenReturn(HoodieStorageUtils.getStorage("file:///", storageConf));
     HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(mockMetaClient);
     List<InternalDataFile> output =
         fileStatsExtractor
@@ -264,7 +273,8 @@ public class TestHudiFileStatsExtractor {
     }
 
     HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class);
-    when(mockMetaClient.getHadoopConf()).thenReturn(configuration);
+    when(mockMetaClient.getStorage())
+        .thenReturn(HoodieStorageUtils.getStorage("file:///", storageConf));
     HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(mockMetaClient);
 
     List<InternalDataFile> inputFiles =
@@ -320,7 +330,8 @@ public class TestHudiFileStatsExtractor {
             .build();
 
     HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class);
-    when(mockMetaClient.getHadoopConf()).thenReturn(configuration);
+    when(mockMetaClient.getStorage())
+        .thenReturn(HoodieStorageUtils.getStorage("file:///", storageConf));
     HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(mockMetaClient);
     List<InternalDataFile> output =
         fileStatsExtractor
@@ -351,7 +362,8 @@ public class TestHudiFileStatsExtractor {
     }
 
     HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class);
-    when(mockMetaClient.getHadoopConf()).thenReturn(configuration);
+    when(mockMetaClient.getStorage())
+        .thenReturn(HoodieStorageUtils.getStorage("file:///", storageConf));
     HudiFileStatsExtractor fileStatsExtractor = new HudiFileStatsExtractor(mockMetaClient);
 
     List<InternalDataFile> inputFiles =

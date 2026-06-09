@@ -32,6 +32,7 @@ import lombok.Value;
 
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.serializer.KryoSerializer;
 
@@ -60,7 +61,7 @@ public class HudiTestUtil {
         .setTableName("test_table")
         .setPayloadClass(HoodieAvroPayload.class)
         .setPartitionFields(partitionFields)
-        .initTable(new Configuration(), tableBasePath);
+        .initTable(HadoopFSUtils.getStorageConf(new Configuration()), tableBasePath);
   }
 
   public static HoodieWriteConfig getHoodieWriteConfig(HoodieTableMetaClient metaClient) {

@@ -44,7 +44,8 @@ import org.apache.hudi.common.model.HoodieColumnRangeMetadata;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.util.ParquetUtils;
 import org.apache.hudi.common.util.collection.Pair;
-import org.apache.hudi.hadoop.CachingPath;
+import org.apache.hudi.hadoop.fs.CachingPath;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 import org.apache.hudi.metadata.HoodieTableMetadata;
 import org.apache.hudi.metadata.MetadataPartitionType;
 
@@ -150,13 +151,16 @@ public class HudiFileStatsExtractor {
                 file.toBuilder()
                     .recordCount(
                         UTILS.getRowCount(
-                            metaClient.getHadoopConf(), new Path(file.getPhysicalPath())))
+                            metaClient.getStorage(),
+                            HadoopFSUtils.convertToStoragePath(new Path(file.getPhysicalPath()))))
                     .build());
   }
 
   private Pair<String, String> getPartitionAndFileName(String path) {
     Path filePath = new CachingPath(path);
-    String partitionPath = HudiPathUtils.getPartitionPath(metaClient.getBasePathV2(), filePath);
+    String partitionPath =
+        HudiPathUtils.getPartitionPath(
+            HadoopFSUtils.convertToHadoopPath(metaClient.getBasePathV2()), filePath);
     return Pair.of(partitionPath, filePath.getName());
   }
 
@@ -232,7 +236,8 @@ public class HudiFileStatsExtractor {
                   stats != null
                       ? stats.getValueCount()
                       : UTILS.getRowCount(
-                          metaClient.getHadoopConf(), new Path(entry.getValue().getPhysicalPath()));
+                          metaClient.getStorage(),
+                          HadoopFSUtils.convertToStoragePath(new Path(entry.getValue().getPhysicalPath())));
               return entry.getValue().toBuilder().recordCount(recordCount).build();
             });
   }
@@ -248,8 +253,9 @@ public class HudiFileStatsExtractor {
   private HudiFileStats computeColumnStatsForFile(
       Path filePath, Map<String, InternalField> nameFieldMap) {
     List<HoodieColumnRangeMetadata<Comparable>> columnRanges =
-        UTILS.readRangeFromParquetMetadata(
-            metaClient.getHadoopConf(), filePath, new ArrayList<>(nameFieldMap.keySet()));
+        UTILS.readColumnStatsFromMetadata(
+            metaClient.getStorage(),
+            HadoopFSUtils.convertToStoragePath(filePath), new ArrayList<>(nameFieldMap.keySet()));
     List<ColumnStat> columnStats =
         columnRanges.stream()
             .map(
@@ -258,7 +264,8 @@ public class HudiFileStatsExtractor {
             .collect(CustomCollectors.toList(columnRanges.size()));
     Long rowCount = getMaxFromColumnStats(columnStats).orElse(null);
     if (rowCount == null) {
-      rowCount = UTILS.getRowCount(metaClient.getHadoopConf(), filePath);
+      rowCount =
+          UTILS.getRowCount(metaClient.getStorage(), HadoopFSUtils.convertToStoragePath(filePath));
     }
     return new HudiFileStats(columnStats, rowCount);
   }

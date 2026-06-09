@@ -106,7 +106,7 @@ public class DeltaConversionSource implements ConversionSource<Long> {
   public TableChange getTableChangeForCommit(Long versionNumber) {
     InternalTable tableAtVersion = tableExtractor.table(deltaLog, tableName, versionNumber);
     List<Action> actionsForVersion = getChangesState().getActionsForVersion(versionNumber);
-    Snapshot snapshotAtVersion = deltaLog.getSnapshotAt(versionNumber, Option.empty());
+    Snapshot snapshotAtVersion = deltaLog.getSnapshotAt(versionNumber, Option.empty(), Option.empty());
     FileFormat fileFormat =
         actionsConverter.convertToFileFormat(snapshotAtVersion.metadata().format().provider());
 

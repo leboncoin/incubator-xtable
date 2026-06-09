@@ -69,6 +69,7 @@ import org.apache.hudi.common.config.HoodieStorageConfig;
 import org.apache.hudi.common.config.LockConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 import org.apache.hudi.common.model.HoodieAvroPayload;
 import org.apache.hudi.common.model.HoodieAvroRecord;
 import org.apache.hudi.common.model.HoodieBaseFile;
@@ -590,14 +591,14 @@ public abstract class TestAbstractHudiTable
   @SneakyThrows
   protected HoodieTableMetaClient getMetaClient(
       TypedProperties keyGenProperties, HoodieTableType hoodieTableType, Configuration conf) {
-    LocalFileSystem fs = (LocalFileSystem) FSUtils.getFs(basePath, conf);
+    LocalFileSystem fs = (LocalFileSystem) HadoopFSUtils.getFs(basePath, conf);
     // Enforce checksum such that fs.open() is consistent to DFS
     fs.setVerifyChecksum(true);
     fs.mkdirs(new org.apache.hadoop.fs.Path(basePath));
 
     if (fs.exists(new org.apache.hadoop.fs.Path(basePath + "/.hoodie"))) {
       return HoodieTableMetaClient.builder()
-          .setConf(conf)
+          .setConf(HadoopFSUtils.getStorageConf(conf))
           .setBasePath(basePath)
           .setLoadActiveTimelineOnLoad(true)
           .build();
@@ -614,7 +615,8 @@ public abstract class TestAbstractHudiTable
             .setCommitTimezone(HoodieTimelineTimeZone.UTC)
             .setBaseFileFormat(HoodieFileFormat.PARQUET.toString())
             .build();
-    return HoodieTableMetaClient.initTableAndGetMetaClient(conf, this.basePath, properties);
+    return HoodieTableMetaClient.initTableAndGetMetaClient(
+        HadoopFSUtils.getStorageConf(conf), this.basePath, properties);
   }
 
   private static Schema.Field copyField(Schema.Field input) {

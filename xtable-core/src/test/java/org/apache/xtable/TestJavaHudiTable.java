@@ -36,6 +36,7 @@ import lombok.Getter;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.client.HoodieJavaWriteClient;
@@ -320,7 +321,8 @@ public class TestJavaHudiTable extends TestAbstractHudiTable {
               .withArchivalConfig(archivalConfig)
               .build();
     }
-    HoodieEngineContext context = new HoodieJavaEngineContext(conf);
+    HoodieEngineContext context =
+        new HoodieJavaEngineContext(HadoopFSUtils.getStorageConf(conf));
     return new HoodieJavaWriteClient<>(context, writeConfig);
   }
 }

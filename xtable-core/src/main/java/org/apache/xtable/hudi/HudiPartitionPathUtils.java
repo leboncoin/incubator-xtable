@@ -56,13 +56,14 @@ public class HudiPartitionPathUtils {
         HoodieMetadataConfig.newBuilder()
             .enable(metaClient.getTableConfig().isMetadataTableAvailable())
             .build();
-    HoodieEngineContext engineContext = new HoodieLocalEngineContext(metaClient.getHadoopConf());
+    HoodieEngineContext engineContext = new HoodieLocalEngineContext(metaClient.getStorageConf());
     String basePath = metaClient.getBasePathV2().toString();
 
     try {
-      if (metadataConfig.enabled()) {
+      if (metadataConfig.isEnabled()) {
         HoodieTableMetadata tableMetadata =
-            HoodieTableMetadata.create(engineContext, metadataConfig, basePath, true);
+            HoodieTableMetadata.create(
+                engineContext, metaClient.getStorage(), metadataConfig, basePath, true);
         try {
           return Optional.of(tableMetadata.getAllPartitionPaths());
         } finally {
@@ -73,7 +74,8 @@ public class HudiPartitionPathUtils {
           }
         }
       }
-      return Optional.of(FSUtils.getAllPartitionPaths(engineContext, metadataConfig, basePath));
+      return Optional.of(FSUtils.getAllPartitionPaths(
+              engineContext, metaClient.getStorage(), metadataConfig, basePath));
     } catch (IOException ex) {
       throw new ReadException("Unable to read partitions for Hudi table at " + tableBasePath, ex);
     }
