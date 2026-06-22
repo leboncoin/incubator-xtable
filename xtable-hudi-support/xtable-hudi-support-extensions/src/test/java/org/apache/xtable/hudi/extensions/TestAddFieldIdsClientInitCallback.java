@@ -38,6 +38,7 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.GenericRecordBuilder;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -81,7 +82,7 @@ public class TestAddFieldIdsClientInitCallback {
     Schema inputSchema = getSchemaStub(1);
     Schema updatedSchema = getSchemaStub(3);
 
-    HoodieEngineContext localEngineContext = new HoodieLocalEngineContext(new Configuration());
+    HoodieEngineContext localEngineContext = new HoodieLocalEngineContext(HadoopFSUtils.getStorageConf(new Configuration()));
     HoodieWriteConfig config =
         HoodieWriteConfig.newBuilder()
             .withSchema(inputSchema.toString())
@@ -105,7 +106,7 @@ public class TestAddFieldIdsClientInitCallback {
     Schema inputSchema = getSchemaStub(2);
     Schema updatedSchema = getSchemaStub(3);
 
-    HoodieEngineContext localEngineContext = new HoodieJavaEngineContext(new Configuration());
+    HoodieEngineContext localEngineContext = new HoodieJavaEngineContext(HadoopFSUtils.getStorageConf(new Configuration()));
     String basePath = getTableBasePath();
     HoodieWriteConfig tableConfig =
         HoodieWriteConfig.newBuilder()
@@ -126,7 +127,7 @@ public class TestAddFieldIdsClientInitCallback {
       properties.setProperty(
           VERSION.key(), Integer.toString(HoodieTableVersion.current().versionCode()));
       HoodieTableMetaClient.initTableAndGetMetaClient(
-          localEngineContext.getHadoopConf().get(), basePath, properties);
+          localEngineContext.getStorageConf(), basePath, properties);
       String commit = hoodieJavaWriteClient.startCommit();
       GenericRecord genericRecord =
           new GenericRecordBuilder(existingSchema).set("id", "1").set("field", "value").build();
@@ -166,7 +167,7 @@ public class TestAddFieldIdsClientInitCallback {
     properties.setProperty(
         HoodieWriteConfig.WRITE_SCHEMA_OVERRIDE.key(), inputWriteSchema.toString());
 
-    HoodieEngineContext localEngineContext = new HoodieLocalEngineContext(new Configuration());
+    HoodieEngineContext localEngineContext = new HoodieLocalEngineContext(HadoopFSUtils.getStorageConf(new Configuration()));
     HoodieWriteConfig config =
         HoodieWriteConfig.newBuilder()
             .withSchema(inputSchema.toString())

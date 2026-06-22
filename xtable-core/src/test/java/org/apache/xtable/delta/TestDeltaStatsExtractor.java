@@ -42,6 +42,8 @@ import org.apache.xtable.model.schema.InternalField;
 import org.apache.xtable.model.schema.InternalSchema;
 import org.apache.xtable.model.schema.InternalType;
 import org.apache.xtable.model.stat.ColumnStat;
+import scala.Option;
+
 import org.apache.xtable.model.stat.FileStats;
 import org.apache.xtable.model.stat.Range;
 import org.apache.xtable.testutil.ColumnStatMapUtil;
@@ -125,7 +127,10 @@ public class TestDeltaStatsExtractor {
     String stats =
         DeltaStatsExtractor.getInstance()
             .convertStatsToDeltaFormat(schema, numRecords, columnStats);
-    AddFile addFile = new AddFile("file://path/to/file", null, 0, 0, true, stats, null, null);
+    AddFile addFile =
+        new AddFile(
+            "file://path/to/file", null, 0, 0, true, stats, null, null,
+            Option.empty(), Option.empty(), Option.empty());
     DeltaStatsExtractor extractor = DeltaStatsExtractor.getInstance();
     FileStats actual = extractor.getColumnStatsForFile(addFile, fields);
     List<ColumnStat> actualColumStats = actual.getColumnStats();
@@ -161,7 +166,10 @@ public class TestDeltaStatsExtractor {
     deltaStats.put("tightBounds", Boolean.TRUE);
     deltaStats.put("nonExisting", minValues);
     String stats = MAPPER.writeValueAsString(deltaStats);
-    AddFile addFile = new AddFile("file://path/to/file", null, 0, 0, true, stats, null, null);
+    AddFile addFile =
+        new AddFile(
+            "file://path/to/file", null, 0, 0, true, stats, null, null,
+            Option.empty(), Option.empty(), Option.empty());
     DeltaStatsExtractor extractor = DeltaStatsExtractor.getInstance();
     FileStats actual = extractor.getColumnStatsForFile(addFile, fields);
     List<ColumnStat> actualColumStats = actual.getColumnStats();
@@ -204,7 +212,10 @@ public class TestDeltaStatsExtractor {
   @Test
   void convertNullStatsToInternalRepresentation() {
     List<InternalField> fields = getSchemaFields();
-    AddFile addFile = new AddFile("file://path/to/file", null, 0, 0, true, null, null, null);
+    AddFile addFile =
+        new AddFile(
+            "file://path/to/file", null, 0, 0, true, null, null, null,
+            Option.empty(), Option.empty(), Option.empty());
     DeltaStatsExtractor extractor = DeltaStatsExtractor.getInstance();
     FileStats actual = extractor.getColumnStatsForFile(addFile, fields);
     List<ColumnStat> actualColumStats = actual.getColumnStats();

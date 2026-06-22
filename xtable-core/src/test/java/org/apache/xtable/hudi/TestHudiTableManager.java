@@ -37,6 +37,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 
 import org.apache.xtable.model.InternalTable;
 import org.apache.xtable.model.schema.InternalField;
@@ -98,7 +99,7 @@ public class TestHudiTableManager {
     HoodieTableMetaClient metaClient =
         HoodieTableMetaClient.builder()
             .setBasePath(tableBasePath)
-            .setConf(CONFIGURATION)
+            .setConf(HadoopFSUtils.getStorageConf(CONFIGURATION))
             .setLoadActiveTimelineOnLoad(false)
             .build();
     assertFalse(metaClient.getTableConfig().populateMetaFields());

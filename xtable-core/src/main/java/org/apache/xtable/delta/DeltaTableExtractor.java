@@ -43,7 +43,7 @@ public class DeltaTableExtractor {
   private static final DeltaSchemaExtractor schemaExtractor = DeltaSchemaExtractor.getInstance();
 
   public InternalTable table(DeltaLog deltaLog, String tableName, Long version) {
-    Snapshot snapshot = deltaLog.getSnapshotAt(version, Option.empty());
+    Snapshot snapshot = deltaLog.getSnapshotAt(version, Option.empty(), Option.empty());
     InternalSchema schema = schemaExtractor.toInternalSchema(snapshot.metadata().schema());
     List<InternalPartitionField> partitionFields =
         DeltaPartitionExtractor.getInstance()

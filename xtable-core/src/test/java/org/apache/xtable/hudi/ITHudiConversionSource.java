@@ -59,6 +59,7 @@ import org.apache.hudi.common.model.HoodieAvroPayload;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.hadoop.fs.HadoopFSUtils;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 
 import org.apache.xtable.GenericTable;
@@ -689,7 +690,7 @@ public class ITHudiConversionSource {
       Configuration conf, String basePath, String xTablePartitionConfig) {
     HoodieTableMetaClient hoodieTableMetaClient =
         HoodieTableMetaClient.builder()
-            .setConf(conf)
+            .setConf(HadoopFSUtils.getStorageConf(conf))
             .setBasePath(basePath)
             .setLoadActiveTimelineOnLoad(true)
             .build();
