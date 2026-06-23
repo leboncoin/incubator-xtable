@@ -193,7 +193,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
             fullName, escapeSqlString(location));
     log.info("Databricks UC create table: {}", fullName);
     executeStatement(statement);
-    updateSparkDataSourceSchemaProperty(table, fullName);
+    updateSparkDataSourceSchemaProperty(table, null, fullName);
     updateLatestDateHourPartitionProperty(table, fullName);
   }
 
@@ -222,7 +222,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
       log.info(
           "Databricks UC refreshTable: schema already up to date for {}", tableIdentifier.getId());
     }
-    updateSparkDataSourceSchemaProperty(table, getFullName(tableIdentifier));
+    updateSparkDataSourceSchemaProperty(table, catalogTable, getFullName(tableIdentifier));
     updateLatestDateHourPartitionProperty(table, getFullName(tableIdentifier));
   }
 
@@ -343,7 +343,8 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
     return value.replace("'", "''");
   }
 
-  private void updateSparkDataSourceSchemaProperty(InternalTable table, String fullName) {
+  private void updateSparkDataSourceSchemaProperty(
+      InternalTable table, TableInfo catalogTable, String fullName) {
     if (!databricksConfig.isSparkDataSourceTableEnabled()) {
       return;
     }
@@ -357,6 +358,14 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
       Map<String, String> schemaProperties =
           SparkDataSourceSchemaUtils.getSparkSchemaProperties(
               schema, partitionFieldNames, databricksConfig.getSparkSchemaStringLengthThreshold());
+
+      // The UC GET table response already carries the current spark.sql.sources.schema.* values,
+      // so we diff in memory and skip the ALTER TABLE when nothing changed (avoids a needless
+      // SQL statement, and the commit/version bump it triggers, on every unchanged sync).
+      if (sparkSchemaPropertiesUnchanged(schemaProperties, catalogTable)) {
+        log.info("Databricks UC spark.sql.sources.schema.* already up to date for {}", fullName);
+        return;
+      }
 
       StringBuilder assignments = new StringBuilder();
       boolean first = true;
@@ -377,6 +386,23 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
     } catch (Exception ex) {
       log.warn("Unable to set spark.sql.sources.schema.* for {}", fullName, ex);
     }
+  }
+
+  // True when every desired spark.sql.sources.schema.* key already exists in the catalog table with
+  // the exact same value. A stale catalog table (null/empty properties) is treated as changed so we
+  // re-emit the properties.
+  private static boolean sparkSchemaPropertiesUnchanged(
+      Map<String, String> desired, TableInfo catalogTable) {
+    if (catalogTable == null || catalogTable.getProperties() == null) {
+      return false;
+    }
+    Map<String, String> existing = catalogTable.getProperties();
+    for (Map.Entry<String, String> entry : desired.entrySet()) {
+      if (!Objects.equals(entry.getValue(), existing.get(entry.getKey()))) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static List<String> partitionFieldNames(InternalTable table) {

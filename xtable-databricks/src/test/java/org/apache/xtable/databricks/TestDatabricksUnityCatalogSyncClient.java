@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -326,6 +327,64 @@ public class TestDatabricksUnityCatalogSyncClient {
     assertEquals(
         "MSCK REPAIR TABLE main.default.people SYNC METADATA",
         requestCaptor.getValue().getStatement());
+  }
+
+  @Test
+  void testRefreshTableSkipsWhenSchemaAndSparkPropertiesUnchanged() {
+    Map<String, String> props = new HashMap<>();
+    props.put(DatabricksUnityCatalogConfig.HOST, "https://example.cloud.databricks.com");
+    props.put(DatabricksUnityCatalogConfig.WAREHOUSE_ID, "wh-1");
+    props.put(DatabricksUnityCatalogConfig.SPARK_DATA_SOURCE_TABLE_ENABLED, "true");
+    ExternalCatalogConfig config =
+        ExternalCatalogConfig.builder()
+            .catalogId("uc")
+            .catalogType(CatalogType.DATABRICKS_UC)
+            .catalogProperties(props)
+            .build();
+
+    DatabricksUnityCatalogSyncClient client =
+        new DatabricksUnityCatalogSyncClient(
+            config,
+            TableFormat.DELTA,
+            new Configuration(),
+            mockStatementExecution,
+            mockTablesApi,
+            mockSchemasApi);
+
+    InternalSchema idSchema =
+        InternalSchema.builder().name("id").dataType(InternalType.INT).isNullable(true).build();
+    InternalSchema readSchema =
+        InternalSchema.builder()
+            .name("root")
+            .dataType(InternalType.RECORD)
+            .isNullable(true)
+            .fields(
+                java.util.Arrays.asList(
+                    InternalField.builder().name("id").schema(idSchema).build()))
+            .build();
+    InternalTable table =
+        InternalTable.builder().basePath("s3://bucket/path").readSchema(readSchema).build();
+
+    // Catalog table already mirrors the desired schema (so no MSCK) and already carries the exact
+    // spark.sql.sources.schema.* values, so refreshTable must not emit any SQL statement.
+    Map<String, String> sparkProps =
+        SparkDataSourceSchemaUtils.getSparkSchemaProperties(
+            readSchema,
+            java.util.Collections.emptyList(),
+            DatabricksUnityCatalogConfig.DEFAULT_SPARK_SCHEMA_STRING_LENGTH_THRESHOLD);
+    TableInfo catalogTable =
+        new TableInfo()
+            .setColumns(
+                java.util.Arrays.asList(
+                    new ColumnInfo().setName("id").setTypeText("int").setNullable(true)))
+            .setProperties(sparkProps);
+
+    ThreePartHierarchicalTableIdentifier tableIdentifier =
+        new ThreePartHierarchicalTableIdentifier("main", "default", "people");
+
+    client.refreshTable(table, catalogTable, tableIdentifier);
+
+    verify(mockStatementExecution, never()).executeStatement(any(ExecuteStatementRequest.class));
   }
 
   @Test
