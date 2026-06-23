@@ -32,6 +32,14 @@ public class DatabricksUnityCatalogConfig {
   public static final String CLIENT_ID = "externalCatalog.uc.clientId";
   public static final String CLIENT_SECRET = "externalCatalog.uc.clientSecret";
   public static final String TOKEN = "externalCatalog.uc.token";
+  // Opt-in: replicate Hudi/Hive `spark.sql.sources.schema.*` table properties (StructType JSON
+  // with column comments) on the UC table. Disabled by default.
+  public static final String SPARK_DATA_SOURCE_TABLE_ENABLED =
+      "externalCatalog.uc.sparkDataSourceTable.enabled";
+  // Max length of each `spark.sql.sources.schema.part.N` chunk; mirrors Hudi's default threshold.
+  public static final String SPARK_SCHEMA_STRING_LENGTH_THRESHOLD =
+      "externalCatalog.uc.sparkDataSourceTable.schemaStringLengthThreshold";
+  public static final int DEFAULT_SPARK_SCHEMA_STRING_LENGTH_THRESHOLD = 4000;
 
   String host;
   String warehouseId;
@@ -39,6 +47,8 @@ public class DatabricksUnityCatalogConfig {
   String clientId;
   String clientSecret;
   String token;
+  boolean sparkDataSourceTableEnabled;
+  int sparkSchemaStringLengthThreshold;
 
   public static DatabricksUnityCatalogConfig from(ExternalCatalogConfig catalogConfig) {
     Map<String, String> props = catalogConfig.getCatalogProperties();
@@ -48,6 +58,20 @@ public class DatabricksUnityCatalogConfig {
         props.get(AUTH_TYPE),
         props.get(CLIENT_ID),
         props.get(CLIENT_SECRET),
-        props.get(TOKEN));
+        props.get(TOKEN),
+        Boolean.parseBoolean(props.get(SPARK_DATA_SOURCE_TABLE_ENABLED)),
+        parseThreshold(props.get(SPARK_SCHEMA_STRING_LENGTH_THRESHOLD)));
+  }
+
+  private static int parseThreshold(String raw) {
+    if (raw == null || raw.trim().isEmpty()) {
+      return DEFAULT_SPARK_SCHEMA_STRING_LENGTH_THRESHOLD;
+    }
+    try {
+      int value = Integer.parseInt(raw.trim());
+      return value > 0 ? value : DEFAULT_SPARK_SCHEMA_STRING_LENGTH_THRESHOLD;
+    } catch (NumberFormatException e) {
+      return DEFAULT_SPARK_SCHEMA_STRING_LENGTH_THRESHOLD;
+    }
   }
 }

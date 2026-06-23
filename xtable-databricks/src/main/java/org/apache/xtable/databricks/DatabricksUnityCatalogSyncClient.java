@@ -19,6 +19,7 @@
 package org.apache.xtable.databricks;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -55,6 +56,7 @@ import org.apache.xtable.model.InternalTable;
 import org.apache.xtable.model.catalog.CatalogTableIdentifier;
 import org.apache.xtable.model.catalog.HierarchicalTableIdentifier;
 import org.apache.xtable.model.schema.InternalField;
+import org.apache.xtable.model.schema.InternalPartitionField;
 import org.apache.xtable.model.schema.InternalSchema;
 import org.apache.xtable.model.storage.CatalogType;
 import org.apache.xtable.model.storage.TableFormat;
@@ -191,6 +193,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
             fullName, escapeSqlString(location));
     log.info("Databricks UC create table: {}", fullName);
     executeStatement(statement);
+    updateSparkDataSourceSchemaProperty(table, null, fullName);
     updateLatestDateHourPartitionProperty(table, fullName);
   }
 
@@ -219,6 +222,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
       log.info(
           "Databricks UC refreshTable: schema already up to date for {}", tableIdentifier.getId());
     }
+    updateSparkDataSourceSchemaProperty(table, catalogTable, getFullName(tableIdentifier));
     updateLatestDateHourPartitionProperty(table, getFullName(tableIdentifier));
   }
 
@@ -337,6 +341,81 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
 
   private static String escapeSqlString(String value) {
     return value.replace("'", "''");
+  }
+
+  private void updateSparkDataSourceSchemaProperty(
+      InternalTable table, TableInfo catalogTable, String fullName) {
+    if (!databricksConfig.isSparkDataSourceTableEnabled()) {
+      return;
+    }
+    InternalSchema schema = table.getReadSchema();
+    if (schema == null || schema.getFields() == null || schema.getFields().isEmpty()) {
+      log.warn("Databricks UC skipping spark.sql.sources.schema for {}: missing schema", fullName);
+      return;
+    }
+    try {
+      List<String> partitionFieldNames = partitionFieldNames(table);
+      Map<String, String> schemaProperties =
+          SparkDataSourceSchemaUtils.getSparkSchemaProperties(
+              schema, partitionFieldNames, databricksConfig.getSparkSchemaStringLengthThreshold());
+
+      // The UC GET table response already carries the current spark.sql.sources.schema.* values,
+      // so we diff in memory and skip the ALTER TABLE when nothing changed (avoids a needless
+      // SQL statement, and the commit/version bump it triggers, on every unchanged sync).
+      if (sparkSchemaPropertiesUnchanged(schemaProperties, catalogTable)) {
+        log.info("Databricks UC spark.sql.sources.schema.* already up to date for {}", fullName);
+        return;
+      }
+
+      StringBuilder assignments = new StringBuilder();
+      boolean first = true;
+      for (Map.Entry<String, String> entry : schemaProperties.entrySet()) {
+        if (!first) {
+          assignments.append(", ");
+        }
+        assignments
+            .append("'")
+            .append(escapeSqlString(entry.getKey()))
+            .append("' = '")
+            .append(escapeSqlString(entry.getValue()))
+            .append("'");
+        first = false;
+      }
+      executeStatement(
+          String.format("ALTER TABLE %s SET TBLPROPERTIES (%s)", fullName, assignments));
+    } catch (Exception ex) {
+      log.warn("Unable to set spark.sql.sources.schema.* for {}", fullName, ex);
+    }
+  }
+
+  // True when every desired spark.sql.sources.schema.* key already exists in the catalog table with
+  // the exact same value. A stale catalog table (null/empty properties) is treated as changed so we
+  // re-emit the properties.
+  private static boolean sparkSchemaPropertiesUnchanged(
+      Map<String, String> desired, TableInfo catalogTable) {
+    if (catalogTable == null || catalogTable.getProperties() == null) {
+      return false;
+    }
+    Map<String, String> existing = catalogTable.getProperties();
+    for (Map.Entry<String, String> entry : desired.entrySet()) {
+      if (!Objects.equals(entry.getValue(), existing.get(entry.getKey()))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static List<String> partitionFieldNames(InternalTable table) {
+    if (table.getPartitioningFields() == null) {
+      return java.util.Collections.emptyList();
+    }
+    List<String> names = new java.util.ArrayList<>();
+    for (InternalPartitionField partitionField : table.getPartitioningFields()) {
+      if (partitionField.getSourceField() != null) {
+        names.add(partitionField.getSourceField().getName());
+      }
+    }
+    return names;
   }
 
   private void updateLatestDateHourPartitionProperty(InternalTable table, String fullName) {
