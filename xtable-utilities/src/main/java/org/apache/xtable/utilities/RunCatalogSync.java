@@ -26,6 +26,7 @@ import static org.apache.xtable.utilities.RunSync.loadTableFormatConversionConfi
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -185,6 +186,7 @@ public class RunCatalogSync {
                 .namespace(sourceTable.getNamespace())
                 .formatName(targetCatalogTableIdentifier.getTableFormat())
                 .additionalProperties(sourceTable.getAdditionalProperties())
+                .metadataRetention(getMetadataRetention())
                 .build();
         targetTables.add(targetTable);
         if (!targetCatalogs.containsKey(targetTable)) {
@@ -281,6 +283,29 @@ public class RunCatalogSync {
     }
     log.warn("Unsupported SYNC_MODE '{}', defaulting to INCREMENTAL.", value);
     return SyncMode.INCREMENTAL;
+  }
+
+  /**
+   * Reads the target metadata retention from the {@code XTABLE_TARGET_METADATA_RETENTION_HOURS}
+   * environment variable. Returns {@code null} so {@link TargetTable} keeps its built-in default (7
+   * days) when the variable is unset or invalid; the CLI never hard-codes a retention itself.
+   */
+  static Duration getMetadataRetention() {
+    String value = System.getenv("XTABLE_TARGET_METADATA_RETENTION_HOURS");
+    if (value == null || value.trim().isEmpty()) {
+      return null;
+    }
+    try {
+      long hours = Long.parseLong(value.trim());
+      if (hours <= 0) {
+        log.warn("Ignoring non-positive XTABLE_TARGET_METADATA_RETENTION_HOURS '{}'", value);
+        return null;
+      }
+      return Duration.ofHours(hours);
+    } catch (NumberFormatException e) {
+      log.warn("Ignoring invalid XTABLE_TARGET_METADATA_RETENTION_HOURS '{}'", value);
+      return null;
+    }
   }
 
   private static boolean hasSyncFailures(Map<String, SyncResult> syncResults) {

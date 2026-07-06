@@ -45,4 +45,14 @@ class TestRunCatalogSync {
     // Ensure options parsing and execution works with continuous catchup enabled.
     assertDoesNotThrow(() -> RunCatalogSync.main(args));
   }
+
+  @Test
+  void testMetadataRetentionDefaultsToNullWhenEnvUnset() {
+    // The CLI must not hard-code a retention: when the env var is unset the helper returns null
+    // so TargetTable keeps its built-in 7-day default. The env var is not set in the test JVM.
+    assertNull(
+        System.getenv("XTABLE_TARGET_METADATA_RETENTION_HOURS"),
+        "Test precondition: XTABLE_TARGET_METADATA_RETENTION_HOURS must be unset");
+    assertNull(RunCatalogSync.getMetadataRetention());
+  }
 }
