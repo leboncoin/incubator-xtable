@@ -63,6 +63,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import org.apache.spark.sql.delta.DeltaConfigs;
 import org.apache.spark.sql.delta.GeneratedColumn;
 
 import scala.collection.JavaConverters;
@@ -174,6 +175,52 @@ public class TestDeltaSync {
     TableFormatSync.getInstance()
         .syncSnapshot(Collections.singletonList(conversionTarget), snapshot2);
     validateDeltaTable(basePath, new HashSet<>(Arrays.asList(dataFile2, dataFile3)), null);
+  }
+
+  @Test
+  public void testSyncPreservesExternalTableProperties() throws Exception {
+    String customPropertyKey = "custom.external.property";
+    String customPropertyValue = "some-value";
+
+    InternalSchema schema = getInternalSchema();
+    InternalTable table1 = getInternalTable(tableName, basePath, schema, null, LAST_COMMIT_TIME);
+    InternalTable table2 = getInternalTable(tableName, basePath, schema, null, LAST_COMMIT_TIME);
+
+    InternalDataFile dataFile1 = getDataFile(1, Collections.emptyList(), basePath);
+    InternalDataFile dataFile2 = getDataFile(2, Collections.emptyList(), basePath);
+    InternalDataFile dataFile3 = getDataFile(3, Collections.emptyList(), basePath);
+
+    InternalSnapshot snapshot1 = buildSnapshot(table1, "0", dataFile1, dataFile2);
+    InternalSnapshot snapshot2 = buildSnapshot(table2, "1", dataFile2, dataFile3);
+
+    // Initial XTable sync creates the Delta log.
+    TableFormatSync.getInstance()
+        .syncSnapshot(Collections.singletonList(conversionTarget), snapshot1);
+
+    // An external writer sets a table property outside of XTable (e.g. ALTER TABLE SET TBLPROPERTIES).
+    sparkSession.sql(
+        String.format(
+            "ALTER TABLE delta.`%s` SET TBLPROPERTIES ('%s' = '%s')",
+            basePath, customPropertyKey, customPropertyValue));
+    // Sanity check: the property is present right after the external write.
+    assertEquals(customPropertyValue, readDeltaConfig(basePath).get(customPropertyKey));
+
+    // The next hourly XTable sync must not wipe the externally-set property.
+    TableFormatSync.getInstance()
+        .syncSnapshot(Collections.singletonList(conversionTarget), snapshot2);
+
+    Map<String, String> config = readDeltaConfig(basePath);
+    assertEquals(
+        customPropertyValue,
+        config.get(customPropertyKey),
+        "XTable Delta sync wiped an externally-set TBLPROPERTY");
+
+    // The XTable-owned configuration keys must still be present after the merge (min reader/writer
+    // versions are consumed by Delta into the Protocol action, so they don't live in the metadata
+    // configuration map -- assert on the keys that do: the serialized XTable metadata and the log
+    // retention duration).
+    assertNotNull(config.get(TableSyncMetadata.XTABLE_METADATA));
+    assertTrue(config.containsKey(DeltaConfigs.LOG_RETENTION().key()));
   }
 
   @Test
@@ -358,7 +405,8 @@ public class TestDeltaSync {
             .expr();
     org.apache.spark.sql.delta.DeltaLog deltaLog =
         org.apache.spark.sql.delta.DeltaLog.forTable(sparkSession, basePath.toString());
-    org.apache.spark.sql.delta.Snapshot snapshot = deltaLog.update(false, scala.Option.empty(), scala.Option.empty());
+    org.apache.spark.sql.delta.Snapshot snapshot =
+        deltaLog.update(false, scala.Option.empty(), scala.Option.empty());
     Seq<org.apache.spark.sql.catalyst.expressions.Expression> expressionSeq =
         scala.collection.JavaConversions.asScalaBuffer(Collections.singletonList(expression));
     Seq<org.apache.spark.sql.catalyst.expressions.Expression> translatedExpression =
@@ -505,6 +553,16 @@ public class TestDeltaSync {
     }
     assertEquals(
         internalDataFiles.size(), count, "Number of files from DeltaScan don't match expectation");
+  }
+
+  private Map<String, String> readDeltaConfig(Path basePath) {
+    org.apache.spark.sql.delta.DeltaLog deltaLog =
+        org.apache.spark.sql.delta.DeltaLog.forTable(sparkSession, basePath.toString());
+    return JavaConverters.mapAsJavaMap(
+        deltaLog
+            .update(false, scala.Option.empty(), scala.Option.empty())
+            .metadata()
+            .configuration());
   }
 
   private void validateDeltaTableUsingSpark(

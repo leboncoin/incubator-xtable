@@ -328,7 +328,9 @@ public class DeltaConversionTarget implements ConversionTarget {
     }
 
     private Map<String, String> getConfigurationsForDeltaSync() {
-      Map<String, String> configMap = new HashMap<>();
+      // Preserve existing properties; updateMetadata replaces the whole configuration map.
+      Map<String, String> configMap =
+          new HashMap<>(JavaConverters.mapAsJavaMap(deltaLog.snapshot().metadata().configuration()));
       configMap.put(
           DeltaConfigs.MIN_READER_VERSION().key(),
           String.valueOf(
