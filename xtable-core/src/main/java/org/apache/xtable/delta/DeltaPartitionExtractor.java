@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -234,7 +235,12 @@ public class DeltaPartitionExtractor {
     if (partitionFields == null) {
       return null;
     }
-    Map<String, StructField> nameToStructFieldMap = new HashMap<>();
+    // LinkedHashMap preserves the source partition-field order (e.g. Hudi
+    // version/event_date/event_hour) into the Delta `partitionColumns`.
+    // A plain HashMap reorders by key hash, so the Delta metadata diverged
+    // from the source layout and the first Delta write landed files under a
+    // different directory order than the original Hudi table.
+    Map<String, StructField> nameToStructFieldMap = new LinkedHashMap<>();
     for (InternalPartitionField internalPartitionField : partitionFields) {
       String currPartitionColumnName;
       StructField field;
