@@ -531,6 +531,37 @@ public class TestDeltaPartitionExtractor {
     assertEquals(expected, actual);
   }
 
+  @Test
+  void convertToDeltaPartitionFormatPreservesFieldOrder() {
+    // Regression: a plain HashMap reordered the partition columns by key hash,
+    // so a Hudi table partitioned version/event_date/event_hour surfaced in Delta
+    // as event_date/version/event_hour and the first Delta write diverged the
+    // on-disk directory layout from the source. The declared order must be kept.
+    List<String> sourceOrder = Arrays.asList("version", "event_date", "event_hour");
+    List<InternalPartitionField> partitionFields =
+        sourceOrder.stream()
+            .map(
+                name ->
+                    InternalPartitionField.builder()
+                        .sourceField(
+                            InternalField.builder()
+                                .name(name)
+                                .schema(
+                                    InternalSchema.builder()
+                                        .name("string")
+                                        .dataType(InternalType.STRING)
+                                        .build())
+                                .build())
+                        .transformType(PartitionTransformType.VALUE)
+                        .build())
+            .collect(java.util.stream.Collectors.toList());
+
+    Map<String, StructField> actual =
+        deltaPartitionExtractor.convertToDeltaPartitionFormat(partitionFields);
+
+    assertEquals(sourceOrder, new java.util.ArrayList<>(actual.keySet()));
+  }
+
   private scala.collection.mutable.Map<String, String> convertJavaMapToScalaMap(
       Map<String, String> javaMap) {
     return JavaConverters.mapAsScalaMapConverter(javaMap).asScala();
