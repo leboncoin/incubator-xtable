@@ -771,4 +771,82 @@ public class ITHudiConversionSource {
     String fileId;
     String commitTime;
   }
+
+  @Test
+  public void testInflightCommitOlderThanLastSyncedInstantIsTrackedAsPending() {
+    // A concurrent writer numbers its instant when the write opens, so a long-running write can own
+    // an instant older than the one a later sync lands on, and only complete afterwards. Once it
+    // completes, findInstantsAfter() can no longer return it, so it has to be reported as pending
+    // here or its files are never propagated to the target.
+    HudiTestUtil.PartitionConfig partitionConfig = HudiTestUtil.PartitionConfig.of(null, null);
+    try (TestJavaHudiTable table =
+        TestJavaHudiTable.forStandardSchema(
+            GenericTable.getTableName(),
+            tempDir,
+            partitionConfig.getHudiConfig(),
+            HoodieTableType.COPY_ON_WRITE)) {
+      table.insertRecords(true, table.generateRecords(100));
+
+      // The concurrent writer opens first, so it owns the lower instant, and stays in-flight.
+      String inflightInstant = table.startCommit();
+
+      // The periodic writer then opens and completes: this is the instant the sync lands on.
+      String syncedInstant = table.startCommit();
+      table.insertRecordsWithCommitAlreadyStarted(table.generateRecords(10), syncedInstant, true);
+
+      HudiConversionSource hudiClient =
+          getHudiSourceClient(
+              CONFIGURATION, table.getBasePath(), partitionConfig.getXTableConfig());
+      CommitsBacklog<HoodieInstant> backlog =
+          hudiClient.getCommitsBacklog(
+              InstantsForIncrementalSync.builder()
+                  .lastSyncInstant(HudiInstantUtils.parseFromInstantTime(syncedInstant))
+                  .build());
+
+      assertTrue(
+          backlog
+              .getInFlightInstants()
+              .contains(HudiInstantUtils.parseFromInstantTime(inflightInstant)),
+          "in-flight commit opened before the last synced instant must be carried over as pending");
+    }
+  }
+
+  @Test
+  public void testInflightCommitIsTrackedAsPendingWhenNewerCommitsExist() {
+    // Same carry-over as above, but with a completed commit newer than the sync point so the
+    // backlog is not empty: the pending scan must not be limited to the instants after it.
+    HudiTestUtil.PartitionConfig partitionConfig = HudiTestUtil.PartitionConfig.of(null, null);
+    try (TestJavaHudiTable table =
+        TestJavaHudiTable.forStandardSchema(
+            GenericTable.getTableName(),
+            tempDir,
+            partitionConfig.getHudiConfig(),
+            HoodieTableType.COPY_ON_WRITE)) {
+      table.insertRecords(true, table.generateRecords(100));
+
+      // The concurrent writer opens first and stays in flight.
+      String inflightInstant = table.startCommit();
+
+      // The sync lands here, and another commit completes afterwards.
+      String syncedInstant = table.startCommit();
+      table.insertRecordsWithCommitAlreadyStarted(table.generateRecords(10), syncedInstant, true);
+      table.insertRecords(true, table.generateRecords(10));
+
+      HudiConversionSource hudiClient =
+          getHudiSourceClient(
+              CONFIGURATION, table.getBasePath(), partitionConfig.getXTableConfig());
+      CommitsBacklog<HoodieInstant> backlog =
+          hudiClient.getCommitsBacklog(
+              InstantsForIncrementalSync.builder()
+                  .lastSyncInstant(HudiInstantUtils.parseFromInstantTime(syncedInstant))
+                  .build());
+
+      assertFalse(backlog.getCommitsToProcess().isEmpty(), "the newer commit must be processed");
+      assertTrue(
+          backlog
+              .getInFlightInstants()
+              .contains(HudiInstantUtils.parseFromInstantTime(inflightInstant)),
+          "in-flight commit must be carried over even when newer commits are being processed");
+    }
+  }
 }
