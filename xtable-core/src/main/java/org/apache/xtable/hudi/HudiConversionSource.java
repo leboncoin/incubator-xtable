@@ -232,22 +232,29 @@ public class HudiConversionSource implements ConversionSource<HoodieInstant> {
     // collect the completed instants & inflight instants from all the instants.
     List<HoodieInstant> completedInstants =
         allInstants.stream().filter(HoodieInstant::isCompleted).collect(Collectors.toList());
-    // Nothing to sync as there are only pending commits.
-    if (completedInstants.isEmpty()) {
-      return CommitsPair.builder().completedCommits(completedInstants).build();
-    }
-    // remove from pending instants that are larger than the last completed instant.
+    // An instant is numbered when the write opens, so a concurrent writer can hold an instant
+    // older than the one this sync lands on and only complete it afterwards. findInstantsAfter()
+    // will never return that commit once completed, so the only way to pick it up later is to
+    // record it as pending while it is still in flight, hence the scan over the whole active
+    // timeline rather than over allInstants. Missing that snapshot leaves the target pointing at
+    // the base files the commit replaced, until the cleaner deletes them and reads start failing.
+    HoodieInstant pendingUpperBound =
+        completedInstants.isEmpty()
+            ? commitInstant
+            : completedInstants.get(completedInstants.size() - 1);
     List<Instant> pendingInstants =
-        allInstants.stream()
-            .filter(hoodieInstant -> hoodieInstant.isInflight() || hoodieInstant.isRequested())
-            .filter(
-                hoodieInstant ->
-                    hoodieInstant.compareTo(completedInstants.get(completedInstants.size() - 1))
-                        <= 0)
+        metaClient
+            .getActiveTimeline()
+            .filterInflightsAndRequested()
+            .findInstantsBefore(pendingUpperBound.getTimestamp())
+            .getInstants()
+            .stream()
             .map(
                 hoodieInstant ->
                     HudiInstantUtils.parseFromInstantTime(hoodieInstant.getTimestamp()))
             .collect(Collectors.toList());
+    // completedInstants may be empty (nothing new to sync); the pending commits above still have
+    // to be carried over, since they become unreachable once completed.
     return CommitsPair.builder()
         .completedCommits(completedInstants)
         .pendingCommits(pendingInstants)
