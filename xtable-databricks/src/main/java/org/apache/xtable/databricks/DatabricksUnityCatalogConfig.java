@@ -32,6 +32,10 @@ public class DatabricksUnityCatalogConfig {
   public static final String CLIENT_ID = "externalCatalog.uc.clientId";
   public static final String CLIENT_SECRET = "externalCatalog.uc.clientSecret";
   public static final String TOKEN = "externalCatalog.uc.token";
+  // Workload identity federation: path to a file holding an OIDC JWT (a projected Kubernetes
+  // service account token), exchanged for a short-lived Databricks token. No secret to store.
+  public static final String OIDC_TOKEN_FILE_PATH = "externalCatalog.uc.oidcTokenFilePath";
+  public static final String TOKEN_AUDIENCE = "externalCatalog.uc.tokenAudience";
   // Opt-in: replicate Hudi/Hive `spark.sql.sources.schema.*` table properties (StructType JSON
   // with column comments) on the UC table. Disabled by default.
   public static final String SPARK_DATA_SOURCE_TABLE_ENABLED =
@@ -47,6 +51,8 @@ public class DatabricksUnityCatalogConfig {
   String clientId;
   String clientSecret;
   String token;
+  String oidcTokenFilePath;
+  String tokenAudience;
   boolean sparkDataSourceTableEnabled;
   int sparkSchemaStringLengthThreshold;
 
@@ -59,6 +65,8 @@ public class DatabricksUnityCatalogConfig {
         props.get(CLIENT_ID),
         props.get(CLIENT_SECRET),
         props.get(TOKEN),
+        props.get(OIDC_TOKEN_FILE_PATH),
+        props.get(TOKEN_AUDIENCE),
         Boolean.parseBoolean(props.get(SPARK_DATA_SOURCE_TABLE_ENABLED)),
         parseThreshold(props.get(SPARK_SCHEMA_STRING_LENGTH_THRESHOLD)));
   }

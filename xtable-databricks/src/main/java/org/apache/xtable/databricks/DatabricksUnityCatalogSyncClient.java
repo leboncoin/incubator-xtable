@@ -18,6 +18,12 @@
  
 package org.apache.xtable.databricks;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -256,6 +262,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
       throw new CatalogSyncException(
           "Databricks UC catalog requires host and warehouseId in catalogProperties");
     }
+    validateOidcConfig(databricksConfig);
     if (this.statementExecution == null) {
       this.workspaceClient = new WorkspaceClient(buildConfig(databricksConfig));
       this.statementExecution = workspaceClient.statementExecution();
@@ -276,6 +283,47 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
         "Initialized Databricks UC sync client for catalogId={} tableFormat={}",
         catalogConfig.getCatalogId(),
         tableFormat);
+  }
+
+  // The SDK's TokenSourceCredentialsProvider swallows the cause and returns null, turning any
+  // exchange failure into an opaque "cannot configure default credentials". Fail here instead.
+  private void validateOidcConfig(DatabricksUnityCatalogConfig config) {
+    if (!StringUtils.isBlank(config.getToken())
+        || StringUtils.isBlank(config.getOidcTokenFilePath())) {
+      return;
+    }
+    if (StringUtils.isBlank(config.getClientId())) {
+      throw new CatalogSyncException(
+          "Databricks UC OIDC federation requires "
+              + DatabricksUnityCatalogConfig.CLIENT_ID
+              + " (the service principal application id, not a secret)");
+    }
+    Path tokenPath;
+    try {
+      tokenPath = Paths.get(config.getOidcTokenFilePath());
+    } catch (InvalidPathException e) {
+      throw new CatalogSyncException(
+          "Invalid "
+              + DatabricksUnityCatalogConfig.OIDC_TOKEN_FILE_PATH
+              + ": "
+              + config.getOidcTokenFilePath(),
+          e);
+    }
+    if (!Files.isRegularFile(tokenPath)) {
+      throw new CatalogSyncException(
+          "OIDC token file does not exist: "
+              + config.getOidcTokenFilePath()
+              + ". Expected a projected service account token mounted in the pod");
+    }
+    try {
+      if (StringUtils.isBlank(new String(Files.readAllBytes(tokenPath), StandardCharsets.UTF_8))) {
+        throw new CatalogSyncException(
+            "OIDC token file is empty: " + config.getOidcTokenFilePath());
+      }
+    } catch (IOException e) {
+      throw new CatalogSyncException(
+          "Failed to read OIDC token file: " + config.getOidcTokenFilePath(), e);
+    }
   }
 
   private void ensureDeltaOnly() {
@@ -321,13 +369,25 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
     return response;
   }
 
-  private DatabricksConfig buildConfig(DatabricksUnityCatalogConfig config) {
+  // Package-private for testing: the constructor injecting mocked APIs never reaches this path.
+  DatabricksConfig buildConfig(DatabricksUnityCatalogConfig config) {
     DatabricksConfig dbConfig = new DatabricksConfig().setHost(config.getHost());
     if (!StringUtils.isBlank(config.getAuthType())) {
       dbConfig.setAuthType(config.getAuthType());
     }
     if (!StringUtils.isBlank(config.getToken())) {
       dbConfig.setToken(config.getToken());
+    } else if (!StringUtils.isBlank(config.getOidcTokenFilePath())) {
+      // Federation: the SDK reads the JWT from the file on every refresh and exchanges it, so the
+      // rotation kubelet performs on the projected token is picked up without restarting the job.
+      dbConfig.setOidcTokenFilepath(config.getOidcTokenFilePath());
+      dbConfig.setClientId(config.getClientId());
+      if (!StringUtils.isBlank(config.getTokenAudience())) {
+        dbConfig.setTokenAudience(config.getTokenAudience());
+      }
+      if (StringUtils.isBlank(config.getAuthType())) {
+        dbConfig.setAuthType("file-oidc");
+      }
     } else if (!StringUtils.isBlank(config.getClientId())
         && !StringUtils.isBlank(config.getClientSecret())) {
       dbConfig.setClientId(config.getClientId());

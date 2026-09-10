@@ -158,14 +158,28 @@ datasets:
   - `externalCatalog.uc.clientId`
   - `externalCatalog.uc.clientSecret`
 
-**Not supported yet**
+- OIDC workload identity federation (`file-oidc`), for workloads that hold no secret at all.
+  The token file is typically a projected Kubernetes service account token:
+  - `externalCatalog.uc.oidcTokenFilePath` — path to the file holding the OIDC JWT
+  - `externalCatalog.uc.clientId` — the service principal application id, which is not a secret
+  - `externalCatalog.uc.tokenAudience` — optional, when the policy expects a specific audience
 
-- PAT/token-based auth is intentionally not wired in the current XTable UC integration.
+  ```yaml md title="yaml"
+  catalogProperties:
+    externalCatalog.uc.host: https://<workspace>
+    externalCatalog.uc.warehouseId: <sql-warehouse-id>
+    externalCatalog.uc.oidcTokenFilePath: /var/run/secrets/databricks/serviceaccount/token
+    externalCatalog.uc.clientId: <client-id>
+  ```
 
-**Possible later**
+  The token file is re-read on every refresh, so the rotation Kubernetes performs on the
+  projected token is picked up without restarting the job. The service principal needs a
+  matching federation policy on the Databricks side.
 
-- PAT or other auth flows could be added by extending the UC config and SDK wiring,
-  but they are out of scope for now.
+**Precedence**
+
+When several are set: `externalCatalog.uc.token` (PAT) wins, then `oidcTokenFilePath`, then
+`clientId`/`clientSecret`. An explicit `externalCatalog.uc.authType` is never overridden.
 
 ### Implementation details (Databricks UC)
 
