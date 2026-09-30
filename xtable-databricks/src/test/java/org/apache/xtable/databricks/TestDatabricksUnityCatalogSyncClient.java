@@ -687,4 +687,82 @@ public class TestDatabricksUnityCatalogSyncClient {
         new ThreePartHierarchicalTableIdentifier("main", "default", "people");
     assertThrows(CatalogSyncException.class, () -> client.getTable(tableIdentifier));
   }
+
+  @Test
+  void testRefreshTableSetsTableCommentWhenChanged() {
+    DatabricksUnityCatalogSyncClient client = newDeltaClient();
+    when(mockStatementExecution.executeStatement(any(ExecuteStatementRequest.class)))
+        .thenReturn(
+            new StatementResponse()
+                .setStatus(new StatementStatus().setState(StatementState.SUCCEEDED)));
+
+    client.refreshTable(
+        tableWithComment("Emitted on the user's account \\ creation"),
+        catalogTableWithComment("Old comment"),
+        new ThreePartHierarchicalTableIdentifier("main", "default", "people"));
+
+    ArgumentCaptor<ExecuteStatementRequest> requestCaptor =
+        ArgumentCaptor.forClass(ExecuteStatementRequest.class);
+    verify(mockStatementExecution).executeStatement(requestCaptor.capture());
+    assertEquals(
+        "COMMENT ON TABLE main.default.people IS 'Emitted on the user\\'s account \\\\ creation'",
+        requestCaptor.getValue().getStatement());
+  }
+
+  @Test
+  void testRefreshTableSkipsTableCommentWhenUnchangedOrAbsent() {
+    DatabricksUnityCatalogSyncClient client = newDeltaClient();
+    ThreePartHierarchicalTableIdentifier tableIdentifier =
+        new ThreePartHierarchicalTableIdentifier("main", "default", "people");
+
+    client.refreshTable(
+        tableWithComment("Same comment"), catalogTableWithComment("Same comment"), tableIdentifier);
+    client.refreshTable(tableWithComment(null), catalogTableWithComment("Kept"), tableIdentifier);
+
+    verify(mockStatementExecution, never()).executeStatement(any(ExecuteStatementRequest.class));
+  }
+
+  private DatabricksUnityCatalogSyncClient newDeltaClient() {
+    Map<String, String> props = new HashMap<>();
+    props.put(DatabricksUnityCatalogConfig.HOST, "https://example.cloud.databricks.com");
+    props.put(DatabricksUnityCatalogConfig.WAREHOUSE_ID, "wh-1");
+    ExternalCatalogConfig config =
+        ExternalCatalogConfig.builder()
+            .catalogId("uc")
+            .catalogType(CatalogType.DATABRICKS_UC)
+            .catalogProperties(props)
+            .build();
+    return new DatabricksUnityCatalogSyncClient(
+        config,
+        TableFormat.DELTA,
+        new Configuration(),
+        mockStatementExecution,
+        mockTablesApi,
+        mockSchemasApi);
+  }
+
+  private static InternalTable tableWithComment(String comment) {
+    InternalSchema idSchema =
+        InternalSchema.builder().name("id").dataType(InternalType.INT).isNullable(true).build();
+    InternalSchema readSchema =
+        InternalSchema.builder()
+            .name("root")
+            .dataType(InternalType.RECORD)
+            .isNullable(true)
+            .comment(comment)
+            .fields(
+                java.util.Arrays.asList(
+                    InternalField.builder().name("id").schema(idSchema).build()))
+            .build();
+    return InternalTable.builder().basePath("s3://bucket/path").readSchema(readSchema).build();
+  }
+
+  // Columns matching tableWithComment, so no MSCK REPAIR is issued.
+  private static TableInfo catalogTableWithComment(String comment) {
+    return new TableInfo()
+        .setComment(comment)
+        .setColumns(
+            java.util.Arrays.asList(
+                new ColumnInfo().setName("id").setTypeText("int").setNullable(true)));
+  }
 }

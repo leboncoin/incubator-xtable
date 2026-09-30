@@ -201,6 +201,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
     executeStatement(statement);
     updateSparkDataSourceSchemaProperty(table, null, fullName);
     updateLatestDateHourPartitionProperty(table, fullName);
+    updateTableComment(table, null, fullName);
   }
 
   @Override
@@ -230,6 +231,7 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
     }
     updateSparkDataSourceSchemaProperty(table, catalogTable, getFullName(tableIdentifier));
     updateLatestDateHourPartitionProperty(table, getFullName(tableIdentifier));
+    updateTableComment(table, catalogTable, getFullName(tableIdentifier));
   }
 
   @Override
@@ -401,6 +403,33 @@ public class DatabricksUnityCatalogSyncClient implements CatalogSyncClient<Table
 
   private static String escapeSqlString(String value) {
     return value.replace("'", "''");
+  }
+
+  /**
+   * Sets the UC table comment from the root schema comment. Skipped when absent or unchanged, since
+   * every statement on a Delta table adds a commit to its log.
+   */
+  private void updateTableComment(InternalTable table, TableInfo catalogTable, String fullName) {
+    InternalSchema schema = table.getReadSchema();
+    String comment = schema == null ? null : schema.getComment();
+    if (StringUtils.isBlank(comment)) {
+      return;
+    }
+    if (catalogTable != null && comment.equals(catalogTable.getComment())) {
+      log.info("Databricks UC table comment already up to date for {}", fullName);
+      return;
+    }
+    try {
+      executeStatement(
+          String.format("COMMENT ON TABLE %s IS '%s'", fullName, escapeStringLiteral(comment)));
+    } catch (Exception ex) {
+      log.warn("Unable to set table comment for {}", fullName, ex);
+    }
+  }
+
+  // Spark SQL literals escape with a backslash: '' is read as two adjacent literals, dropping it.
+  static String escapeStringLiteral(String value) {
+    return value.replace("\\", "\\\\").replace("'", "\\'");
   }
 
   private void updateSparkDataSourceSchemaProperty(

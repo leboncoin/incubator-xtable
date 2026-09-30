@@ -224,6 +224,37 @@ public class TestDeltaSync {
   }
 
   @Test
+  public void testSyncTableCommentToDeltaDescription() throws Exception {
+    InternalSchema schema = getInternalSchema().toBuilder().comment("Table comment").build();
+    InternalTable table1 = getInternalTable(tableName, basePath, schema, null, LAST_COMMIT_TIME);
+    InternalTable table2 =
+        getInternalTable(tableName, basePath, getInternalSchema(), null, LAST_COMMIT_TIME);
+    InternalDataFile dataFile1 = getDataFile(1, Collections.emptyList(), basePath);
+    InternalDataFile dataFile2 = getDataFile(2, Collections.emptyList(), basePath);
+
+    TableFormatSync.getInstance()
+        .syncSnapshot(
+            Collections.singletonList(conversionTarget), buildSnapshot(table1, "0", dataFile1));
+    assertEquals("Table comment", readDeltaDescription(basePath));
+    assertEquals(
+        "Table comment",
+        DeltaTableExtractor.builder()
+            .build()
+            .table(
+                org.apache.spark.sql.delta.DeltaLog.forTable(sparkSession, basePath.toString()),
+                tableName,
+                0L)
+            .getReadSchema()
+            .getComment());
+
+    // a source without comment keeps the current description
+    TableFormatSync.getInstance()
+        .syncSnapshot(
+            Collections.singletonList(conversionTarget), buildSnapshot(table2, "1", dataFile2));
+    assertEquals("Table comment", readDeltaDescription(basePath));
+  }
+
+  @Test
   public void testPrimitiveFieldPartitioning() throws Exception {
     InternalSchema schema = getInternalSchema();
     InternalPartitionField internalPartitionField =
@@ -563,6 +594,13 @@ public class TestDeltaSync {
             .update(false, scala.Option.empty(), scala.Option.empty())
             .metadata()
             .configuration());
+  }
+
+  private String readDeltaDescription(Path basePath) {
+    return org.apache.spark.sql.delta.DeltaLog.forTable(sparkSession, basePath.toString())
+        .update(false, scala.Option.empty(), scala.Option.empty())
+        .metadata()
+        .description();
   }
 
   private void validateDeltaTableUsingSpark(

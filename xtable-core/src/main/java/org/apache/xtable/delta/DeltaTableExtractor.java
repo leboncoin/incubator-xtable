@@ -45,6 +45,11 @@ public class DeltaTableExtractor {
   public InternalTable table(DeltaLog deltaLog, String tableName, Long version) {
     Snapshot snapshot = deltaLog.getSnapshotAt(version, Option.empty(), Option.empty());
     InternalSchema schema = schemaExtractor.toInternalSchema(snapshot.metadata().schema());
+    // The Delta table description is the table comment, carried as the root schema comment.
+    String description = snapshot.metadata().description();
+    if (description != null && !description.isEmpty()) {
+      schema = schema.toBuilder().comment(description).build();
+    }
     List<InternalPartitionField> partitionFields =
         DeltaPartitionExtractor.getInstance()
             .convertFromDeltaPartitionFormat(schema, snapshot.metadata().partitionSchema());
