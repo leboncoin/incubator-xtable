@@ -285,6 +285,7 @@ public class DeltaConversionTarget implements ConversionTarget {
     private final String tableName;
     @Getter private StructType latestSchema;
     @Getter private InternalSchema latestSchemaInternal;
+    private String tableComment;
     @Setter private TableSyncMetadata metadata;
     @Setter private Seq<Action> actions;
 
@@ -306,6 +307,8 @@ public class DeltaConversionTarget implements ConversionTarget {
 
     private void setLatestSchema(InternalSchema schema) {
       this.latestSchemaInternal = schema;
+      // Kept apart: addColumn rebuilds latestSchemaInternal from a StructType, without root doc.
+      this.tableComment = schema.getComment();
       this.latestSchema = SparkSchemaExtractor.getInstance().fromInternalSchema(schema);
     }
 
@@ -314,7 +317,7 @@ public class DeltaConversionTarget implements ConversionTarget {
           new Metadata(
               deltaLog.tableId(),
               tableName,
-              "",
+              getDescription(),
               getFileFormat(),
               latestSchema.json(),
               JavaConverters.asScalaBuffer(partitionColumns).toList(),
@@ -325,6 +328,17 @@ public class DeltaConversionTarget implements ConversionTarget {
           actions,
           new DeltaOperations.Update(Option.apply(Literal.fromObject("xtable-delta-sync"))),
           ScalaUtils.convertJavaMapToScala(getCommitTags()));
+    }
+
+    /**
+     * Source table comment, falling back to the current Delta description when the source has none.
+     */
+    private String getDescription() {
+      if (tableComment != null && !tableComment.isEmpty()) {
+        return tableComment;
+      }
+      String currentDescription = deltaLog.snapshot().metadata().description();
+      return currentDescription != null ? currentDescription : "";
     }
 
     private Map<String, String> getConfigurationsForDeltaSync() {
